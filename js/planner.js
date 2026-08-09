@@ -22,13 +22,15 @@ const Planner = (() => {
   function buildPlannerContext(state) {
     const s = App.selectors;
     return {
-      dailyMinutes: state.settings.dailyStudyMinutes,
+      dailyMinutes: state.profile.dailyStudyMinutes,
       revisionsDueToday: s.revisionsDueToday(),
       homeworkToday: s.todaysHomework(),
       weakChapters: s.weakChapters(8),
       incompleteChapters: s.incompleteChapters(),
       upcomingExams: s.upcomingExams(3),
       weeklyTargets: state.weeklyTargets,
+      batchClassesToday: s.todaysBatchClasses(),
+      pendingDppCount: s.pendingDppCount(),
     };
   }
 
@@ -43,6 +45,19 @@ const Planner = (() => {
       tasks.push({ ...task, duration, done: false });
       minutesLeft -= duration;
     };
+
+    // 0. Today's batch classes — fixed-schedule commitments come first.
+    ctx.batchClassesToday.filter((c) => !c.completed).forEach((c) => {
+      push({
+        subjectId: c.subject,
+        subject: c.subject,
+        chapter: c.chapter,
+        task: `Batch Lecture ${c.lectureNumber}${c.time ? " · " + c.time : ""}`,
+        duration: 45,
+        priority: "High",
+        type: "Lecture",
+      });
+    });
 
     // 1. Revisions due today — always prioritised (spaced repetition works
     //    only if it happens on schedule).
@@ -70,6 +85,23 @@ const Planner = (() => {
         type: "homework",
       });
     });
+
+    // 2b. Pending DPPs — light, quick-win tasks.
+    if (ctx.pendingDppCount > 0) {
+      const withPendingDpp = ctx.incompleteChapters.concat(App.selectors.allChapters().filter((c) => c.status === "completed"))
+        .find((c) => (c.dpps || []).some((d) => d.status !== "completed"));
+      if (withPendingDpp) {
+        push({
+          subjectId: withPendingDpp.subjectId,
+          subject: withPendingDpp.subjectName,
+          chapter: withPendingDpp.name,
+          task: "Solve pending DPP",
+          duration: 20,
+          priority: "Medium",
+          type: "DPP",
+        });
+      }
+    }
 
     // 3. Exam-driven urgency — if an exam is within 7 days, pull in its
     //    weakest incomplete chapters.

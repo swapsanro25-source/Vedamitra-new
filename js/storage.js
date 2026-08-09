@@ -27,23 +27,36 @@ const Store = (() => {
           mistakes: "",
           completedDate: null,
           revisionSchedule: [], // [{ date: 'YYYY-MM-DD', label:'Day 1', done:false }]
+          // --- VEDAMITRA 2.0 ---
+          lectures: [], // [{ completed:false, completedDate:null }] — length = batch lecture count
+          dpps: [], // [{ status:'pending'|'completed', date:null, score:null, remarks:'' }]
         };
       });
     });
 
     return {
-      version: 1,
+      version: 2,
       onboarded: false,
-      settings: {
+      profile: {
         studentName: "",
-        boardExamDate: "", // e.g. first ICSE 2027 paper date
+        className: "10",
+        board: "ICSE",
+        academicYear: "2026-27",
+        schoolName: "",
+        subjects: SUBJECTS.map((s) => s.id), // which subjects the student is actually taking
         dailyStudyMinutes: 120,
+        preferredDays: [...WEEKDAYS],
+        batchScheduleNote: "",
+      },
+      settings: {
+        boardExamDate: "", // first ICSE 2027 paper date
       },
       subjects,
       homework: [],
-      exams: [],
+      exams: [], // { id, name, subject, date, type, importantChapters, priority, prepStatus }
       notes: [],
       weeklyTargets: [],
+      batchClasses: [], // { id, subject, chapter, lectureNumber, date, time, teacher, completed }
       todayPlan: { date: null, tasks: [] },
       studyLog: [], // [{date, subjectId, chapterId, minutes}]
     };
@@ -55,21 +68,39 @@ const Store = (() => {
       if (!raw) return defaultState();
       const parsed = JSON.parse(raw);
       // Merge to protect against subjects/chapters added after a user's
-      // first save (keeps old progress, adds new chapter shells).
+      // first save (keeps old progress, adds new chapter shells), and to
+      // backfill v2 fields (lectures/dpps/profile) onto a v1 save.
       const base = defaultState();
       Object.keys(base.subjects).forEach((sid) => {
         if (!parsed.subjects || !parsed.subjects[sid]) return;
         Object.keys(base.subjects[sid].chapters).forEach((cid) => {
-          if (parsed.subjects[sid].chapters[cid]) {
-            base.subjects[sid].chapters[cid] = parsed.subjects[sid].chapters[cid];
+          const savedChapter = parsed.subjects[sid].chapters[cid];
+          if (savedChapter) {
+            base.subjects[sid].chapters[cid] = {
+              ...base.subjects[sid].chapters[cid], // provides lectures:[] / dpps:[] if missing
+              ...savedChapter,
+            };
           }
         });
       });
+
+      // v1 stored the student's name/exam date directly on `settings`;
+      // v2 moves the name into `profile`. Carry it forward either way.
+      const legacySettings = parsed.settings || {};
+      const migratedProfile = {
+        ...base.profile,
+        ...(parsed.profile || {}),
+        studentName: (parsed.profile && parsed.profile.studentName) || legacySettings.studentName || base.profile.studentName,
+      };
+
       return {
         ...base,
         ...parsed,
-        settings: { ...base.settings, ...(parsed.settings || {}) },
+        profile: migratedProfile,
+        settings: { ...base.settings, boardExamDate: legacySettings.boardExamDate || base.settings.boardExamDate },
         subjects: base.subjects,
+        batchClasses: parsed.batchClasses || [],
+        version: 2,
       };
     } catch (e) {
       console.error("VEDAMITRA: failed to load state, resetting.", e);

@@ -52,8 +52,99 @@ const App = (() => {
   const actions = {
     saveSettings(patch) {
       state.settings = { ...state.settings, ...patch };
+      persistAndNotify();
+    },
+
+    saveProfile(patch) {
+      state.profile = { ...state.profile, ...patch };
+      persistAndNotify();
+    },
+
+    completeOnboarding(profile) {
+      state.profile = { ...state.profile, ...profile };
       state.onboarded = true;
       persistAndNotify();
+    },
+
+    reopenOnboarding() {
+      state.onboarded = false;
+      persistAndNotify();
+    },
+
+    // ---- Lectures (batch tracking) ----
+    setLectureCount(subjectId, chapterId, count) {
+      const ch = state.subjects[subjectId].chapters[chapterId];
+      const n = Math.max(0, Math.min(60, Number(count) || 0));
+      const current = ch.lectures || [];
+      if (n > current.length) {
+        for (let i = current.length; i < n; i++) current.push({ completed: false, completedDate: null });
+      } else {
+        current.length = n;
+      }
+      ch.lectures = current;
+      persistAndNotify();
+    },
+    toggleLecture(subjectId, chapterId, index) {
+      const lec = state.subjects[subjectId].chapters[chapterId].lectures[index];
+      lec.completed = !lec.completed;
+      lec.completedDate = lec.completed ? todayISO() : null;
+      persistAndNotify();
+    },
+
+    // ---- DPPs ----
+    addDpp(subjectId, chapterId) {
+      const ch = state.subjects[subjectId].chapters[chapterId];
+      ch.dpps = ch.dpps || [];
+      ch.dpps.push({ status: "pending", date: null, score: null, remarks: "" });
+      persistAndNotify();
+    },
+    toggleDpp(subjectId, chapterId, index) {
+      const dpp = state.subjects[subjectId].chapters[chapterId].dpps[index];
+      dpp.status = dpp.status === "completed" ? "pending" : "completed";
+      dpp.date = dpp.status === "completed" ? todayISO() : dpp.date;
+      persistAndNotify();
+    },
+    updateDpp(subjectId, chapterId, index, patch) {
+      const ch = state.subjects[subjectId].chapters[chapterId];
+      ch.dpps[index] = { ...ch.dpps[index], ...patch };
+      persistAndNotify();
+    },
+    deleteDpp(subjectId, chapterId, index) {
+      state.subjects[subjectId].chapters[chapterId].dpps.splice(index, 1);
+      persistAndNotify();
+    },
+
+    // ---- Batch classes ----
+    addBatchClass(cls) {
+      state.batchClasses.unshift({ id: crypto.randomUUID(), completed: false, ...cls });
+      persistAndNotify();
+    },
+    updateBatchClass(id, patch) {
+      state.batchClasses = state.batchClasses.map((c) => (c.id === id ? { ...c, ...patch } : c));
+      persistAndNotify();
+    },
+    deleteBatchClass(id) {
+      state.batchClasses = state.batchClasses.filter((c) => c.id !== id);
+      persistAndNotify();
+    },
+    toggleBatchClass(id) {
+      const cls = state.batchClasses.find((c) => c.id === id);
+      const wasCompleted = cls.completed;
+      actions.updateBatchClass(id, { completed: !wasCompleted });
+      // Marking a batch class complete also marks that lecture number complete.
+      if (!wasCompleted) {
+        const subj = SUBJECTS.find((s) => s.name === cls.subject);
+        const chapterMeta = subj?.chapters.find((c) => c.name === cls.chapter);
+        if (subj && chapterMeta) {
+          const ch = state.subjects[subj.id].chapters[chapterMeta.id];
+          const idx = cls.lectureNumber - 1;
+          if (ch.lectures[idx]) {
+            ch.lectures[idx].completed = true;
+            ch.lectures[idx].completedDate = todayISO();
+            persistAndNotify();
+          }
+        }
+      }
     },
 
     setChapterField(subjectId, chapterId, field, value) {
@@ -243,6 +334,36 @@ const App = (() => {
 
     incompleteChapters() {
       return selectors.allChapters().filter((c) => c.status !== "completed");
+    },
+
+    lectureProgress(subjectId, chapterId) {
+      const lectures = state.subjects[subjectId].chapters[chapterId].lectures || [];
+      const completed = lectures.filter((l) => l.completed).length;
+      return { total: lectures.length, completed };
+    },
+    dppProgress(subjectId, chapterId) {
+      const dpps = state.subjects[subjectId].chapters[chapterId].dpps || [];
+      const completed = dpps.filter((d) => d.status === "completed").length;
+      return { total: dpps.length, completed };
+    },
+
+    todaysBatchClasses() {
+      const today = todayISO();
+      return state.batchClasses.filter((c) => c.date === today).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    },
+    upcomingBatchClasses(limit = 5) {
+      const today = todayISO();
+      return state.batchClasses
+        .filter((c) => c.date > today && !c.completed)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, limit);
+    },
+
+    pendingDppCount() {
+      return selectors.allChapters().reduce((sum, c) => sum + (c.dpps || []).filter((d) => d.status !== "completed").length, 0);
+    },
+    pendingLectureCount() {
+      return selectors.allChapters().reduce((sum, c) => sum + (c.lectures || []).filter((l) => !l.completed).length, 0);
     },
 
     todaysHomework() {

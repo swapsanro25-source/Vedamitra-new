@@ -1,10 +1,8 @@
 /**
- * VEDAMITRA — App bootstrap & interactivity
+ * VEDAMITRA 2.0 — App bootstrap & interactivity
  * --------------------------------------------
  * One delegated listener per event type reads `data-action` off the
- * clicked/changed element and dispatches to a handler below. This keeps
- * render.js free of inline JS and means re-rendering never needs to
- * re-attach listeners.
+ * clicked/changed element and dispatches to a handler below.
  */
 
 function renderApp() {
@@ -15,13 +13,10 @@ function renderApp() {
 function closeModal() {
   document.getElementById("modal-layer").innerHTML = "";
 }
-
 function openModal(html) {
   document.getElementById("modal-layer").innerHTML = `
     <div class="modal-backdrop" data-action="close-modal">
-      <div class="modal glass" data-stop>
-        ${html}
-      </div>
+      <div class="modal glass" data-stop>${html}</div>
     </div>`;
 }
 
@@ -33,6 +28,10 @@ function subjectOptions(selected) {
 }
 function subjectNameOptions(selected) {
   return SUBJECTS.map((s) => `<option value="${s.name}" ${selected === s.name ? "selected" : ""}>${s.name}</option>`).join("");
+}
+function chapterNameOptions(subjectName, selected) {
+  const subj = SUBJECTS.find((s) => s.name === subjectName) || SUBJECTS[0];
+  return subj.chapters.map((c) => `<option value="${c.name}" ${selected === c.name ? "selected" : ""}>${c.name}</option>`).join("");
 }
 
 function openAddHomeworkModal() {
@@ -55,8 +54,12 @@ function openAddExamModal() {
     <h3>Add Exam</h3>
     <form data-action="submit-exam">
       <label class="field-block">Exam name<input name="name" required placeholder="e.g. Mid-term" /></label>
-      <label class="field-block">Subject<select name="subject" required>${subjectNameOptions()}</select></label>
+      <div class="field-row">
+        <label>Subject<select name="subject" required>${subjectNameOptions()}</select></label>
+        <label>Type<select name="type">${EXAM_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></label>
+      </div>
       <label class="field-block">Date<input type="date" name="date" required /></label>
+      <label class="field-block">Important chapters (optional)<input name="importantChapters" placeholder="e.g. Quadratic Equations, Circles" /></label>
       <label class="field-block">Priority<select name="priority">${PRIORITY_LEVELS.map((p) => `<option ${p === "High" ? "selected" : ""}>${p}</option>`).join("")}</select></label>
       <div class="modal-actions">
         <button type="button" class="btn-ghost sm" data-action="close-modal">Cancel</button>
@@ -93,8 +96,42 @@ function openAddTargetModal() {
     </form>`);
 }
 
+function openAddBatchModal() {
+  const firstSubject = SUBJECTS[0].name;
+  openModal(`
+    <h3>Add Batch Class</h3>
+    <form data-action="submit-batch">
+      <label class="field-block">Subject<select name="subject" id="batch-subject" required>${subjectNameOptions()}</select></label>
+      <label class="field-block">Chapter<select name="chapter" id="batch-chapter" required>${chapterNameOptions(firstSubject)}</select></label>
+      <div class="field-row">
+        <label>Lecture number<input type="number" name="lectureNumber" min="1" required value="1" /></label>
+        <label>Date<input type="date" name="date" required value="${App.todayISO()}" /></label>
+      </div>
+      <div class="field-row">
+        <label>Time (optional)<input type="time" name="time" /></label>
+        <label>Teacher/batch label (optional)<input name="teacher" placeholder="e.g. Mr Rao" /></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost sm" data-action="close-modal">Cancel</button>
+        <button type="submit" class="btn-primary sm">Add Class</button>
+      </div>
+    </form>`);
+  document.getElementById("batch-subject").addEventListener("change", (e) => {
+    document.getElementById("batch-chapter").innerHTML = chapterNameOptions(e.target.value);
+  });
+}
+
 // ---------------------------------------------------------------------
-// Event delegation
+// Onboarding helpers
+// ---------------------------------------------------------------------
+function obGoStep(delta) {
+  const state = App.getState();
+  state._onboardingStep = Math.max(0, (state._onboardingStep || 0) + delta);
+  App.setView(App.getView());
+}
+
+// ---------------------------------------------------------------------
+// Event delegation — click
 // ---------------------------------------------------------------------
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-action]");
@@ -118,6 +155,35 @@ document.addEventListener("click", (e) => {
       document.querySelector(".scrim").classList.remove("show");
       break;
 
+    // ---- Onboarding ----
+    case "ob-next": obGoStep(1); break;
+    case "ob-back": obGoStep(-1); break;
+    case "ob-add-exam": {
+      const name = document.getElementById("ob-exam-name").value.trim();
+      const subject = document.getElementById("ob-exam-subject").value;
+      const date = document.getElementById("ob-exam-date").value;
+      if (!name || !date) { alert("Enter an exam name and date."); break; }
+      state._onboardingDraft.exams = state._onboardingDraft.exams || [];
+      state._onboardingDraft.exams.push({ name, subject, date });
+      App.setView(App.getView());
+      break;
+    }
+    case "ob-remove-exam":
+      break; // handled via change delegation below (data-ob-remove-exam is on click too, see fallthrough)
+    case "ob-finish": {
+      const draft = state._onboardingDraft;
+      const { exams, ...profile } = draft;
+      App.actions.completeOnboarding(profile);
+      (exams || []).forEach((ex) => App.actions.addExam({ name: ex.name, subject: ex.subject, date: ex.date, type: "Other", priority: "Medium", importantChapters: "" }));
+      state._onboardingStep = 0;
+      state._onboardingDraft = null;
+      App.setView("dashboard");
+      break;
+    }
+    case "reopen-onboarding":
+      App.actions.reopenOnboarding();
+      break;
+
     case "set-chapter-status":
       App.actions.setChapterStatus(el.dataset.subject, el.dataset.chapter, el.dataset.status);
       break;
@@ -126,6 +192,18 @@ document.addEventListener("click", (e) => {
       break;
     case "complete-revision":
       App.actions.completeRevision(el.dataset.subject, el.dataset.chapter, Number(el.dataset.index));
+      break;
+    case "toggle-lecture":
+      App.actions.toggleLecture(el.dataset.subject, el.dataset.chapter, Number(el.dataset.index));
+      break;
+    case "add-dpp":
+      App.actions.addDpp(el.dataset.subject, el.dataset.chapter);
+      break;
+    case "toggle-dpp":
+      App.actions.toggleDpp(el.dataset.subject, el.dataset.chapter, Number(el.dataset.index));
+      break;
+    case "delete-dpp":
+      App.actions.deleteDpp(el.dataset.subject, el.dataset.chapter, Number(el.dataset.index));
       break;
 
     case "generate-plan": {
@@ -159,6 +237,13 @@ document.addEventListener("click", (e) => {
       App.actions.deleteExam(el.dataset.id);
       break;
 
+    case "toggle-batch-class":
+      App.actions.toggleBatchClass(el.dataset.id);
+      break;
+    case "delete-batch-class":
+      App.actions.deleteBatchClass(el.dataset.id);
+      break;
+
     case "toggle-pin-note": {
       const note = state.notes.find((n) => n.id === el.dataset.id);
       App.actions.updateNote(el.dataset.id, { pinned: !note.pinned });
@@ -185,6 +270,7 @@ document.addEventListener("click", (e) => {
     case "open-add-exam": openAddExamModal(); break;
     case "open-add-note": openAddNoteModal(); break;
     case "open-add-target": openAddTargetModal(); break;
+    case "open-add-batch": openAddBatchModal(); break;
     case "close-modal": closeModal(); break;
 
     case "export-data": Store.exportJSON(state); break;
@@ -197,46 +283,87 @@ document.addEventListener("click", (e) => {
     default:
       break;
   }
+
+  // data-ob-remove-exam is easiest handled here since it's plain click, no data-action.
+  const removeBtn = e.target.closest("[data-ob-remove-exam]");
+  if (removeBtn) {
+    const idx = Number(removeBtn.dataset.obRemoveExam);
+    state._onboardingDraft.exams.splice(idx, 1);
+    App.setView(App.getView());
+  }
 });
 
+// ---------------------------------------------------------------------
+// Event delegation — change
+// ---------------------------------------------------------------------
 document.addEventListener("change", (e) => {
-  const el = e.target.closest("[data-action]");
-  if (!el) return;
-  const action = el.dataset.action;
+  const el = e.target;
   const state = App.getState();
+
+  // Onboarding field bindings (no data-action, just data-ob-*)
+  if (el.dataset.obField) {
+    const field = el.dataset.obField;
+    const value = field === "dailyStudyMinutes" ? Number(el.value) : el.value;
+    state._onboardingDraft[field] = value;
+    return;
+  }
+  if (el.dataset.obSubject) {
+    const id = el.dataset.obSubject;
+    const list = state._onboardingDraft.subjects;
+    state._onboardingDraft.subjects = el.checked ? [...new Set([...list, id])] : list.filter((s) => s !== id);
+    App.setView(App.getView());
+    return;
+  }
+  if (el.dataset.obDay) {
+    const day = el.dataset.obDay;
+    const list = state._onboardingDraft.preferredDays;
+    state._onboardingDraft.preferredDays = el.checked ? [...new Set([...list, day])] : list.filter((d) => d !== day);
+    App.setView(App.getView());
+    return;
+  }
+
+  const actionEl = el.closest("[data-action]");
+  if (!actionEl) return;
+  const action = actionEl.dataset.action;
 
   switch (action) {
     case "toggle-chapter-field":
-      App.actions.setChapterField(el.dataset.subject, el.dataset.chapter, el.dataset.field, el.checked);
+      App.actions.setChapterField(actionEl.dataset.subject, actionEl.dataset.chapter, actionEl.dataset.field, actionEl.checked);
       break;
     case "set-chapter-field": {
-      const value = el.dataset.numeric ? Number(el.value) : el.value;
-      App.actions.setChapterField(el.dataset.subject, el.dataset.chapter, el.dataset.field, value);
+      const value = actionEl.dataset.numeric ? Number(actionEl.value) : actionEl.value;
+      App.actions.setChapterField(actionEl.dataset.subject, actionEl.dataset.chapter, actionEl.dataset.field, value);
       break;
     }
-    case "set-exam-prep":
-      App.actions.updateExam(el.dataset.id, { prepStatus: el.value });
+    case "set-lecture-count":
+      App.actions.setLectureCount(actionEl.dataset.subject, actionEl.dataset.chapter, actionEl.value);
       break;
-    case "setting-field": {
-      const field = el.dataset.field;
-      const value = field === "dailyStudyMinutes" ? Number(el.value) : el.value;
-      App.actions.saveSettings({ [field]: value });
+    case "set-dpp-score":
+      App.actions.updateDpp(actionEl.dataset.subject, actionEl.dataset.chapter, Number(actionEl.dataset.index), { score: actionEl.value === "" ? null : Number(actionEl.value) });
+      break;
+    case "set-exam-prep":
+      App.actions.updateExam(actionEl.dataset.id, { prepStatus: actionEl.value });
+      break;
+    case "setting-field":
+      App.actions.saveSettings({ [actionEl.dataset.field]: actionEl.value });
+      break;
+    case "profile-field": {
+      const field = actionEl.dataset.field;
+      const value = field === "dailyStudyMinutes" ? Number(actionEl.value) : actionEl.value;
+      App.actions.saveProfile({ [field]: value });
       break;
     }
     case "search-notes":
-      state._noteQuery = el.value;
+      state._noteQuery = actionEl.value;
       App.setView("notes");
       break;
     case "import-data": {
-      const file = el.files[0];
+      const file = actionEl.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        try {
-          App.actions.importState(JSON.parse(reader.result));
-        } catch (err) {
-          alert("That file doesn't look like a valid VEDAMITRA backup.");
-        }
+        try { App.actions.importState(JSON.parse(reader.result)); }
+        catch (err) { alert("That file doesn't look like a valid VEDAMITRA backup."); }
       };
       reader.readAsText(file);
       break;
@@ -246,6 +373,9 @@ document.addEventListener("change", (e) => {
   }
 });
 
+// ---------------------------------------------------------------------
+// Event delegation — submit
+// ---------------------------------------------------------------------
 document.addEventListener("submit", (e) => {
   const form = e.target.closest("form[data-action]");
   if (!form) return;
@@ -260,7 +390,7 @@ document.addEventListener("submit", (e) => {
       closeModal();
       break;
     case "submit-exam":
-      App.actions.addExam({ name: val("name"), subject: val("subject"), date: val("date"), priority: val("priority") });
+      App.actions.addExam({ name: val("name"), subject: val("subject"), type: val("type"), date: val("date"), importantChapters: val("importantChapters"), priority: val("priority") });
       closeModal();
       break;
     case "submit-note": {
@@ -273,6 +403,13 @@ document.addEventListener("submit", (e) => {
     }
     case "submit-target":
       App.actions.addWeeklyTarget({ label: val("label"), goal: Number(val("goal")), deadline: val("deadline") });
+      closeModal();
+      break;
+    case "submit-batch":
+      App.actions.addBatchClass({
+        subject: val("subject"), chapter: val("chapter"), lectureNumber: Number(val("lectureNumber")),
+        date: val("date"), time: val("time"), teacher: val("teacher"),
+      });
       closeModal();
       break;
     default:

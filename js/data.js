@@ -197,3 +197,38 @@ const REVISION_INTERVALS_DAYS = [1, 3, 7, 15, 30];
 
 // Priority levels shared by Homework and Exams
 const PRIORITY_LEVELS = ["Low", "Medium", "High"];
+
+// Exam/test types (VEDAMITRA 2.0)
+const EXAM_TYPES = ["School Test", "Batch Test", "Unit Test", "Pre-Board", "Board Examination", "Other"];
+
+// Task types used by the daily plan / batch classes
+const TASK_TYPES = ["Lecture", "DPP", "Homework", "Revision", "Questions", "Theory", "Notes", "Test Prep"];
+
+// Days of week for "preferred study days"
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/**
+ * External resources — verified against CISCE's official site. Only real,
+ * checkable links live here. If CISCE reorganises its site, update the URL
+ * below; nothing else needs to change.
+ */
+const RESOURCES = {
+  cisceRegulationsSyllabus: {
+    label: "ICSE 2027 Regulations & Syllabuses",
+    url: "https://cisce.org/icse-regulations-and-syllabuses-2027/",
+    note: "Official CISCE circular link for the ICSE Class 10, Year 2027 Regulations & Syllabuses.",
+  },
+  cisceHome: {
+    label: "CISCE Official Website",
+    url: "https://cisce.org/",
+    note: "Look under Library → Publications for specimen/sample papers and subject syllabi as CISCE publishes them.",
+  },
+};
+
+/**
+ * AI Paper Generator — configure this URL to point at your Gemini-based
+ * generator (or any external tool). No API key ever goes here or anywhere
+ * in the frontend; this is just a link-out. Leave empty to show a clean
+ * "not configured yet" placeholder in the Resources view.
+ */
+const AI_PAPER_GENERATOR_URL = "";
