@@ -1,19 +1,21 @@
 # VEDAMITRA — Your Personal AI Study Companion
 
-**VEDAMITRA 2.0.** A premium, single-page study companion for ICSE Class 10 (2027 exams). Plain HTML/CSS/JS — no build step, no npm install, no framework. Upload this folder to GitHub and it runs as-is.
+**VEDAMITRA 2.1 — Premium redesign + critical bug fix.** A single-page study companion for ICSE Class 10 (2027 exams). Plain HTML/CSS/JS — no build step, no npm install, no framework. Upload this folder to GitHub and it runs as-is.
 
-## What's new in 2.0
+## What's new in this round
 
-- **First-time onboarding wizard** (About You → Subjects → Batch → Upcoming Tests → Study Routine → Finish). Runs once; skipped automatically afterwards. Redo it anytime from Settings.
-- **Batch/coaching lecture tracking** — set a lecture count per chapter, mark individual lectures done; completed lectures stay visible (separate from chapter status).
-- **Daily Batch Classes** — add/edit/delete/complete your scheduled batch lectures; today's and upcoming classes surface on the dashboard and their own **Batch Classes** tab.
-- **DPP tracker** — add DPPs per chapter, mark pending/completed, record a score; kept fully separate from lectures.
-- **Exams** now support a type (School Test / Batch Test / Unit Test / Pre-Board / Board Examination / Other) and important chapters.
-- **Resources tab** — a verified official CISCE link for the ICSE 2027 Regulations & Syllabuses, plus a configurable **AI Paper Generator** link-out (no API key ever touches the frontend).
-- **Redesigned dashboard** with progressive disclosure (Weekly Target and Subject Progress collapse behind `<details>`) so only what matters today is visible up front.
-- **Mobile-first pass**: a bottom tab bar under 640px, tightened spacing/typography down to 320px, no horizontal scroll.
-- **Refreshed color system + splash animation**: forest green ↔ deep blue gradient, smoother logo/name/tagline entrance, respects `prefers-reduced-motion`.
-- Old v1 saves migrate automatically — nothing is lost when this replaces your existing files.
+- **Fixed the chapter-collapse bug.** Editing anything inside an open chapter (PYQs, confidence, difficulty, lecture count, a DPP score, an Educart worksheet) used to snap the chapter shut and feel like you'd been sent back to the dashboard. Root cause and fix are documented at the top of `js/app.js` — short version: every state change fully rebuilds the page's HTML, and a freshly-built `<details>` element always starts closed. The app now remembers which chapter is open (and your scroll position) across every rebuild, so you stay exactly where you were.
+- **Three independent Educart Worksheet checkboxes** (1/2/3) per chapter, alongside Theory/Exercises/Revision/PYQs — completing one never affects the others, and all three persist through refresh/reopen.
+- **Smarter "Today's Study Plan."** The planner used to sometimes fill the whole plan from one subject. It now scores every candidate task (overdue revision, exam urgency, weak/hard chapters, neglected subjects, pending DPPs/lectures) and applies a balancing penalty each time it picks from the same subject again — so multiple subjects with real pending work actually show up together. Details and the exact scoring in the comment at the top of `js/planner.js`.
+- **Refined color system**: forest green/emerald for primary actions and progress, sky blue for resources/information, warm amber for exams/deadlines/priority — replacing the old blue-green-everywhere gradient approach. Neutrals moved to warm white/off-white instead of cold grey.
+- **Toned-down glassmorphism.** Cards are now solid "layered surfaces" (subtle border + controlled shadow) rather than heavy frosted glass — chrome elements (sidebar, topbar, modals) keep a touch of blur, content cards don't.
+- **Typography refresh**: Plus Jakarta Sans for body/section headings, Fraunces reserved for a few large premium moments (greeting name, splash, onboarding) instead of every heading.
+- **Micro-interactions**: button press feedback, a small "pop" on completing a lecture/DPP/checkbox, card hover lift, smooth view-fade on navigation — all disabled automatically under `prefers-reduced-motion`.
+- **Basic PWA support added**: `manifest.json` + `sw.js` (a small runtime-caching service worker) so the app can be added to a phone's home screen and used offline. Registration is wrapped defensively — if the browser doesn't support it, or GitHub Pages serves it oddly, the app just runs normally without it.
+
+### About the reference images and logo PNG
+
+You mentioned two reference screenshots and an uploaded VEDAMITRA PNG logo — **none of these actually came through in the message**, only the text brief. I built the new color system, typography, and layout entirely from your detailed written spec (which was specific enough to work from directly). `assets/logo.svg` is still the same placeholder mark from before. If you upload the real reference images and PNG logo in a follow-up, I can adjust the visual details to match and swap the logo in immediately — the manifest, splash screen, and every branding location already point at one single file (`assets/logo.svg`), so replacing it is a one-file swap.
 
 ## Run it locally
 
@@ -22,92 +24,67 @@
 python3 -m http.server 8000
 # then open http://localhost:8000
 ```
-Opening `index.html` directly (double-click) also works — no build step.
+Opening `index.html` directly (double-click) also works for everything except the service worker, which requires being served over http(s).
 
 ## Deploy on GitHub Pages
 
-1. Push this folder's contents to the **root** of your repository (overwrite the existing files — see "Upgrading from 1.0" below).
+1. Push this folder's contents to the **root** of your repository (overwrite your existing files — every path stays the same as before, plus two new files: `manifest.json` and `sw.js`).
 2. **Settings → Pages → Source** → select your branch.
 3. Live at `https://<username>.github.io/<repo>/` within a minute or two.
 
-## Upgrading from 1.0 (your existing repo)
-
-This is an in-place upgrade, not a rewrite — every file keeps its path:
-
-```
-index.html          (unchanged)
-css/style.css        updated: new color tokens, onboarding/batch/DPP/resources styles, bottom nav, tighter mobile breakpoints
-js/data.js           extended: EXAM_TYPES, TASK_TYPES, WEEKDAYS, RESOURCES, AI_PAPER_GENERATOR_URL — syllabus itself unchanged
-js/storage.js         extended default state (profile, batchClasses, lectures/dpps per chapter) + migration for old saves
-js/state.js           new actions/selectors for profile, lectures, DPPs, batch classes
-js/planner.js         now factors in batch classes and pending DPPs
-js/render.js          rewritten: onboarding, redesigned dashboard, batch/resources views, chapter Lectures/DPP sections
-js/app.js             rewritten: onboarding wizard logic + new event handlers
-js/icons.js           added: calendar, external-link, layers, cap, compass icons
-assets/logo.svg        unchanged — your logo is untouched
-```
-
-Just replace the files above with the versions in this zip. **`assets/logo.svg` is included unchanged** so your existing logo is preserved exactly.
-
-**Your existing data is safe.** `storage.js` detects a v1 save (from before this upgrade) and migrates it automatically the first time the page loads: existing chapter progress, homework, exams, and notes all carry over, and empty `lectures`/`dpps` arrays are backfilled per chapter. You'll still see the onboarding wizard once (since `onboarded` name/date now lives under `profile`), but declining is fine — just fill it in and continue; nothing is deleted.
+Your existing data is untouched by this upgrade — no schema/version bump this round, only new fields that default safely on old saves (see "Persistence" below).
 
 ## Replacing the placeholder logo
 
-If you're still using the placeholder mark from v1, drop your real file in as `assets/logo.svg` (or update the four `<img src="assets/logo.svg">` references if yours is a `.png`). If you already swapped in your real logo, this upgrade leaves it untouched.
+Drop your real file in as `assets/logo.svg` (or update the `<img src="assets/logo.svg">` references across `index.html`/`js/render.js` and `manifest.json`'s `icons` array if yours is a `.png`). Every branding location — splash, sidebar, topbar, onboarding, Settings → About, manifest icons — points at this one file.
 
 ## Editing the syllabus
 
-All subjects and chapters live in **`js/data.js`** in the `SUBJECTS` array — nothing else needs to change when the syllabus is updated. Chapter `id`s are permanent keys progress is stored against — don't rename an existing chapter's `id`.
-
-**Important:** verify every subject against the official CISCE syllabus PDF, linked directly from the app's new **Resources** tab (`https://cisce.org/icse-regulations-and-syllabuses-2027/`), and adjust `js/data.js` if anything has changed for your specific curriculum.
+All subjects and chapters live in **`js/data.js`** in the `SUBJECTS` array. Verify against the official CISCE syllabus PDF, linked directly from the app's **Resources** tab (`https://cisce.org/icse-regulations-and-syllabuses-2027/`).
 
 ## Configuring the AI Paper Generator link
 
-In `js/data.js`, set:
-
+In `js/data.js`:
 ```js
 const AI_PAPER_GENERATOR_URL = "https://your-generator-url-here";
 ```
-
-Leave it empty (`""`) and the Resources tab shows a clean "not configured" placeholder instead of a broken link. Never put an API key here or anywhere in the frontend — this is a link-out only.
+Leave empty (`""`) for a clean "not configured" placeholder. Never put an API key here or anywhere in the frontend.
 
 ## How data is stored
 
-Everything (profile, onboarding status, chapter/lecture/DPP progress, batch classes, homework, exams, notes, weekly targets, settings) is saved to the browser's `localStorage` under the key `vedamitra_state_v1` — private to that browser, free, no account needed. Use **Settings → Export backup** regularly, and **Import backup** to restore or move to another device/browser.
+Everything (profile, onboarding, chapter/lecture/DPP/Educart progress, batch classes, homework, exams, notes, weekly targets, settings) saves to the browser's `localStorage` under `vedamitra_state_v1`. Use **Settings → Export backup** regularly; **Import backup** to restore or move devices.
 
 ## Wiring a real AI planner later
 
-`js/planner.js` currently generates Today's Study Plan with a local, rule-based engine (no network call, no API key — see the comment at the top of that file). It now also factors in today's batch classes and pending DPPs. When you're ready to connect a real AI model:
-
-1. Deploy a small serverless function (Vercel, Cloudflare Worker, Supabase Edge Function, etc.) that holds your AI API key **server-side only**.
-2. Have it accept the same shape `Planner.buildPlannerContext(state)` produces, and return a task array shaped like what `generateTodayPlan` returns.
-3. In `generateTodayPlan`, call that endpoint with `fetch`, and fall back to the existing local logic if the request fails — so the app keeps working offline.
-
-Never put an API key in any frontend file.
+`js/planner.js` runs entirely locally today (no network call, no API key). See the comment at the top of that file for exactly how to swap in a serverless-backed LLM planner later without breaking the offline fallback.
 
 ## Project structure
 
 ```
 index.html
-css/style.css        design system + all component styles (v2 tokens: forest/blue gradient)
-js/data.js            syllabus, subject data, exam types, resources, AI paper generator URL
-js/storage.js         localStorage read/write, versioned schema (v2), migration from v1, backup export/import
-js/state.js           app state, actions (mutations incl. lectures/DPPs/batch), selectors (derived data)
-js/planner.js         local rule-based Today's Plan generator (batch- and DPP-aware)
-js/icons.js           inline SVG icon set
-js/render.js          all view templates incl. onboarding wizard, batch, resources
-js/app.js             boot, event delegation, onboarding logic, modals, splash screen
-assets/logo.svg       your VEDAMITRA logo
+manifest.json         PWA manifest (installable home-screen app)
+sw.js                  minimal runtime-caching service worker
+css/style.css          design system: forest/blue/amber palette, layered surfaces, micro-interactions
+js/data.js             syllabus, subjects, exam types, resources, AI paper generator URL
+js/storage.js          localStorage read/write, versioned schema, migration, backup export/import
+js/state.js            app state, actions (incl. lectures/DPPs/batch/Educart), selectors
+js/planner.js          scored, multi-subject-balanced Today's Plan generator
+js/icons.js            inline SVG icon set
+js/render.js            all view templates, chapter open-state tracking (bug fix)
+js/app.js               boot, event delegation, onboarding, PWA registration, scroll/open-state preservation
+assets/logo.svg         your VEDAMITRA logo (still the placeholder — see note above)
 ```
 
-## Testing checklist
+## Testing checklist (matches the 15 scenarios from the brief)
 
-Splash → onboarding (first run only) → dashboard → Subjects → a subject → a chapter (toggle status, set lecture count, tick lectures, add/toggle a DPP, log time) → Revision → Weekly Target → Homework (all four tabs) → Upcoming Exams → Notes (search/pin) → Resources (both links open in a new tab) → Settings (edit profile, export/import backup) → refresh the page and confirm everything persisted → resize down to ~320px and confirm the bottom nav appears with no horizontal scroll.
+Open a chapter → toggle PYQs → adjust confidence → change difficulty → tick Theory/Exercises/Revision/PYQs/Educart 1/2/3 in sequence → change lecture count → add a DPP → edit mistakes — **you should stay on that exact chapter, expanded, at the same scroll position, through every one of those.** Then: refresh the page (progress remains) → navigate away and back to the chapter (still expanded, still correct) → go to Dashboard → Regenerate Today's Plan with 3+ subjects having pending work (plan should include multiple subjects, not just one) → resize to ~320px/375px/390px/430px/768px/1024px and confirm no horizontal scroll and the bottom nav appears under 640px.
 
 ## Known limitations
 
-- Syllabus chapter lists should be verified against the official CISCE 2027 PDF (linked from Resources).
-- The AI planner is local/rule-based until you wire the serverless endpoint described above; `AI_PAPER_GENERATOR_URL` is a link-out only, not an embedded generator.
-- Data lives in one browser's `localStorage` — no cross-device sync until a backend (Firebase/Supabase) is added; `Store` is the single place that would need to change for that.
-- The official CISCE "specimen/sample papers" link points to the CISCE homepage (Library → Publications) rather than a specific PDF, since CISCE doesn't publish a single stable direct link for those — the Regulations & Syllabuses link, by contrast, is a verified direct URL.
+- No reference images or logo PNG were received this round (see note above) — the visual direction follows your written spec only.
+- Syllabus chapter lists should still be verified against the official CISCE 2027 PDF.
+- The AI planner is local/rule-based until the serverless endpoint described in `js/planner.js` is wired up.
+- The service worker does basic runtime caching (visited pages/assets become available offline); it does not pre-cache the entire app on first load, so the very first visit still needs a network connection.
+- Data lives in one browser's `localStorage` — no cross-device sync until a backend is added.
+
 
