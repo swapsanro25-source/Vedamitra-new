@@ -21,6 +21,9 @@ const Store = (() => {
           exercises: false,
           revision: false,
           pyqs: false,
+          educart1: false,
+          educart2: false,
+          educart3: false,
           confidence: 3, // 1-5
           difficulty: "Medium", // Easy | Medium | Hard
           studyMinutes: 0,

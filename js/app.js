@@ -5,10 +5,46 @@
  * clicked/changed element and dispatches to a handler below.
  */
 
+/**
+ * VEDAMITRA 2.0 — App bootstrap & interactivity
+ * --------------------------------------------
+ * One delegated listener per event type reads `data-action` off the
+ * clicked/changed element and dispatches to a handler below.
+ *
+ * WHY CHAPTERS USED TO COLLAPSE (fixed below):
+ * Every state change causes a full innerHTML rebuild of #app-root (there's
+ * no virtual DOM / diffing here — see render.js). A freshly-built <details>
+ * element always starts closed, so editing anything inside an open chapter
+ * (a checkbox, the confidence slider, lecture count, a DPP score) rebuilt
+ * the page and the chapter you were editing snapped shut — which reads as
+ * "got sent back to the main page" even though you never left the subject
+ * view. The fix has two parts: (1) `_openChapters` below remembers which
+ * chapter <details> are open across rebuilds, independent of localStorage,
+ * and render.js re-applies `open` to the right ones; (2) scroll position is
+ * saved/restored around every rebuild that isn't an explicit navigation.
+ */
+
 function renderApp() {
   const root = document.getElementById("app-root");
+  const scrollY = window.scrollY;
   root.innerHTML = renderShell();
+  if (!App._justNavigated) window.scrollTo(0, scrollY);
+  App._justNavigated = false;
 }
+
+// Remembers which chapter <details> are expanded across re-renders. Never
+// written to localStorage — purely a same-session UI convenience.
+document.addEventListener(
+  "toggle",
+  (e) => {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains("chapter-card")) return;
+    const state = App.getState();
+    state._openChapters = state._openChapters || {};
+    state._openChapters[el.dataset.subject + ":" + el.dataset.chapter] = el.open;
+  },
+  true // 'toggle' does not bubble in all browsers — must listen on capture
+);
 
 function closeModal() {
   document.getElementById("modal-layer").innerHTML = "";
@@ -141,6 +177,7 @@ document.addEventListener("click", (e) => {
 
   switch (action) {
     case "navigate":
+      App._justNavigated = true;
       App.setView(el.dataset.view);
       document.getElementById("sidebar")?.classList.remove("open");
       document.querySelector(".scrim")?.classList.remove("show");
@@ -438,6 +475,14 @@ function boot() {
     splash.classList.add("splash-hide");
     window.setTimeout(() => splash.remove(), 700);
   }, 1400);
+
+  // PWA: safe, best-effort registration — never blocks the app if it fails
+  // (unsupported browser, disallowed scope, offline-only preview, etc.).
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", boot);

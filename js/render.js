@@ -33,6 +33,18 @@ function sectionHeader(title, action) {
   return `<div class="section-header"><h3>${escapeHtml(title)}</h3>${action || ""}</div>`;
 }
 
+// Independent, persistent chapter checklist items. Each is its own boolean
+// field on the chapter object — ticking one never affects the others.
+const CHAPTER_CHECK_FIELDS = [
+  ["theory", "Theory"],
+  ["exercises", "Exercises"],
+  ["revision", "Revision"],
+  ["pyqs", "PYQs"],
+  ["educart1", "Educart Worksheet 1"],
+  ["educart2", "Educart Worksheet 2"],
+  ["educart3", "Educart Worksheet 3"],
+];
+
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
   { id: "subjects", label: "Subjects", icon: "subjects" },
@@ -485,9 +497,11 @@ function renderChapterCard(subject, chapterMeta, chapter) {
   const lecP = App.selectors.lectureProgress(subject.id, chapterMeta.id);
   const dppP = App.selectors.dppProgress(subject.id, chapterMeta.id);
   const nextRevision = (chapter.revisionSchedule || []).find((r) => !r.done);
+  const openKey = subject.id + ":" + chapterMeta.id;
+  const isOpen = !!(App.getState()._openChapters || {})[openKey];
 
   return `
-    <details class="chapter-card glass status-${chapter.status}">
+    <details class="chapter-card surface status-${chapter.status}" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" ${isOpen ? "open" : ""}>
       <summary>
         <span class="status-dot"></span>
         <span class="chapter-name">${escapeHtml(chapterMeta.name)}</span>
@@ -537,10 +551,10 @@ function renderChapterCard(subject, chapterMeta, chapter) {
         <div class="chapter-section">
           <p class="chapter-section-title">${iconEl("book")}Theory &amp; Practice</p>
           <div class="check-grid">
-            ${["theory", "exercises", "revision", "pyqs"].map(
-              (field) => `<label class="check-pill">
+            ${CHAPTER_CHECK_FIELDS.map(
+              ([field, label]) => `<label class="check-pill">
                 <input type="checkbox" data-action="toggle-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="${field}" ${chapter[field] ? "checked" : ""} />
-                <span>${field[0].toUpperCase() + field.slice(1)}</span>
+                <span>${label}</span>
               </label>`
             ).join("")}
           </div>
@@ -730,7 +744,7 @@ function renderResources() {
         ${Object.values(RESOURCES).map((r) => `
           <a class="resource-row" href="${r.url}" target="_blank" rel="noopener noreferrer">
             <div>
-              <p class="resource-title">${escapeHtml(r.label)} <span class="chip chip-low">Official</span></p>
+              <p class="resource-title">${escapeHtml(r.label)} <span class="chip chip-info">Official</span></p>
               <p class="muted">${escapeHtml(r.note)}</p>
             </div>
             ${iconEl("external")}
