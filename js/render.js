@@ -67,33 +67,49 @@ function renderShell() {
   if (!state.onboarded) return renderOnboarding();
 
   const view = App.getView();
-  const current = NAV_ITEMS.find((n) => n.id === view);
-
   return `
-    <div class="app-shell">
-      <main class="main">
-        <header class="topbar">
-          <div class="topbar-brand">
-            <img src="assets/logo.svg" alt="VEDAMITRA" class="topbar-logo" />
-            <div>
-              <span class="topbar-brand-name">VEDAMITRA</span>
-              <span class="topbar-brand-tagline">AI Study Companion</span>
-            </div>
-          </div>
-          <div class="topbar-right">
-            <span class="topbar-page">${escapeHtml(current?.label || "")}</span>
-            <div class="profile-mini">${escapeHtml((state.profile.studentName || "S").slice(0,1).toUpperCase())}</div>
-          </div>
-        </header>
-        <div class="view-root" id="view-root">${renderView(view)}</div>
-        <div class="modal-layer" id="modal-layer"></div>
-      </main>
-    </div>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="VEDAMITRA" class="brand-logo" />
+        <div class="brand-text">
+          <span class="brand-name">VEDAMITRA</span>
+          <span class="brand-tagline">AI Study Companion</span>
+        </div>
+      </div>
+      <nav class="nav">
+        ${NAV_ITEMS.map(
+          (item) => `
+          <button class="nav-item ${view === item.id ? "active" : ""}" data-action="navigate" data-view="${item.id}">
+            ${iconEl(item.icon)}<span>${item.label}</span>
+          </button>`
+        ).join("")}
+      </nav>
+      <div class="sidebar-footer">${examCountdownMini(state)}</div>
+    </aside>
+    <div class="scrim" data-action="close-sidebar"></div>
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-mobile" data-action="open-sidebar">${Icon.menu}</button>
+        <h1 class="topbar-title">${NAV_ITEMS.find((n) => n.id === view)?.label || ""}</h1>
+        <img src="assets/logo.svg" alt="" class="topbar-logo only-mobile" />
+      </header>
+      <div class="view-root" id="view-root">${renderView(view)}</div>
+      ${renderBottomNav(view)}
+    </main>
+    <div class="modal-layer" id="modal-layer"></div>
   `;
 }
 
 function renderBottomNav(view) {
-  return "";
+  return `<nav class="bottom-nav only-narrow">
+    ${BOTTOM_NAV_ITEMS.map((id) => {
+      const item = NAV_ITEMS.find((n) => n.id === id);
+      return `<button class="bottom-nav-item ${view === id ? "active" : ""}" data-action="navigate" data-view="${id}">
+        ${iconEl(item.icon)}<span>${item.label.split(" ")[0]}</span>
+      </button>`;
+    }).join("")}
+    <button class="bottom-nav-item" data-action="open-sidebar">${iconEl("menu")}<span>More</span></button>
+  </nav>`;
 }
 
 function examCountdownMini(state) {
@@ -277,34 +293,6 @@ function renderDashboard() {
         <p class="greeting-sub">Your study overview for today</p>
       </div>
       ${examCountdownCard(state)}
-    </section>
-
-    <section class="dashboard-launcher">
-      <div class="launcher-heading">
-        <div>
-          <p class="launcher-kicker">STUDY HUB</p>
-          <h3>What do you want to work on?</h3>
-        </div>
-        <span class="launcher-hint">Tap a card to open</span>
-      </div>
-      <div class="launcher-grid">
-        ${[
-          ["subjects","subjects","Subjects","Chapters, lectures & progress","blue"],
-          ["batch","cap","Batch Classes","Manage today's & upcoming classes","orange"],
-          ["revision","revision","Revision","Revise chapters at the right time","green"],
-          ["weekly-target","target","Weekly Target","Set and track this week's goals","blue"],
-          ["homework","homework","Homework","Tasks, deadlines & completion","orange"],
-          ["exams","exams","Tests & Exams","Upcoming tests and exam countdowns","green"],
-          ["notes","notes","Notes","Keep important study notes","blue"],
-          ["resources","compass","Resources","Specimen papers & useful links","orange"],
-        ].map(([viewId, icon, title, sub, tone]) => `
-          <button class="launcher-card ${tone}" data-action="navigate" data-view="${viewId}">
-            <span class="launcher-icon">${iconEl(icon)}</span>
-            <span class="launcher-copy"><strong>${title}</strong><small>${sub}</small></span>
-            <span class="launcher-arrow">→</span>
-          </button>
-        `).join("")}
-      </div>
     </section>
 
     <section class="card glass">
