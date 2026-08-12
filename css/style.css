@@ -581,3 +581,221 @@ button:active { transform: scale(0.97); }
 @media (min-width: 431px) and (max-width: 900px) {
   .dash-grid-2 { grid-template-columns: 1fr 1fr; }
 }
+
+
+/* ==========================================================================
+   VEDAMITRA 2.1 — Tablet + Mobile First Dashboard Redesign
+   No sidebar. Dashboard is the navigation hub.
+   ========================================================================== */
+:root {
+  --orange-main: #f58220;
+  --orange-light-new: #fff1e6;
+  --blue-main: #247fca;
+  --blue-light-new: #eaf5ff;
+  --sky-main: #55b8e9;
+  --forest-main: #176b4d;
+  --forest-light-new: #e8f5ef;
+  --pure-white: #ffffff;
+  --page-bg: #f7f8f7;
+  --black-new: #171a18;
+  --grey-new: #69736e;
+  --line-new: #e6ebe8;
+  --soft-shadow-new: 0 8px 24px rgba(20, 35, 28, .055);
+}
+
+html, body { background: var(--page-bg); }
+body {
+  background: var(--page-bg);
+  color: var(--black-new);
+}
+h1,h2,h3,h4 { color: var(--black-new); }
+
+#app-root { display:block; min-height:100vh; }
+.app-shell { min-height:100vh; width:100%; }
+.main {
+  width:100%;
+  max-width:1180px;
+  margin:0 auto;
+  padding:0 24px 72px;
+}
+
+.topbar {
+  min-height:76px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  border-bottom:1px solid var(--line-new);
+  background:rgba(255,255,255,.96);
+  position:sticky;
+  top:0;
+  z-index:30;
+  margin:0 -24px 24px;
+  padding:12px 24px;
+}
+.topbar-brand { display:flex; align-items:center; gap:10px; min-width:0; }
+.topbar-logo { width:42px; height:42px; object-fit:contain; }
+.topbar-brand-name {
+  display:block;
+  color:var(--black-new);
+  font-family:var(--font-body);
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:.04em;
+}
+.topbar-brand-tagline {
+  display:block;
+  color:var(--grey-new);
+  font-size:9px;
+  margin-top:2px;
+}
+.topbar-right { display:flex; align-items:center; gap:12px; }
+.topbar-page {
+  color:var(--grey-new);
+  font-size:12px;
+  font-weight:700;
+}
+.profile-mini {
+  width:38px;height:38px;border-radius:50%;
+  display:grid;place-items:center;
+  background:var(--blue-light-new);
+  color:var(--blue-main);
+  font-weight:800;
+}
+
+.greeting-card {
+  background:var(--orange-main) !important;
+  color:#fff;
+  border:0 !important;
+  box-shadow:none !important;
+  border-radius:22px;
+  padding:24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+}
+.greeting-card .greeting-eyebrow,
+.greeting-card .greeting-name,
+.greeting-card .greeting-sub { color:#fff !important; }
+.greeting-card .greeting-eyebrow { opacity:.86; font-size:10px; font-weight:800; letter-spacing:.12em; }
+.greeting-card .greeting-name { font-family:var(--font-body); font-size:27px; font-weight:800; margin:5px 0; }
+.greeting-card .greeting-sub { opacity:.9; font-size:12px; }
+.countdown-pill {
+  background:#fff;
+  color:var(--black-new);
+  border-radius:16px;
+  padding:13px 17px;
+  min-width:120px;
+  text-align:center;
+  box-shadow:0 6px 18px rgba(0,0,0,.08);
+}
+.countdown-pill .countdown-num {
+  display:block;
+  color:var(--orange-main);
+  font-size:25px;
+  font-weight:800;
+}
+.countdown-pill span:last-child { font-size:10px; }
+
+.dashboard-launcher {
+  background:#fff;
+  border:1px solid var(--line-new);
+  border-radius:22px;
+  padding:20px;
+  margin:16px 0;
+  box-shadow:var(--soft-shadow-new);
+}
+.launcher-heading {
+  display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:14px;
+}
+.launcher-kicker { color:var(--orange-main);font-size:9px;font-weight:800;letter-spacing:.13em;margin:0 0 3px; }
+.launcher-heading h3 { margin:0;font-size:18px;font-weight:800; }
+.launcher-hint { color:var(--grey-new);font-size:10px; }
+.launcher-grid {
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+}
+.launcher-card {
+  min-height:92px;
+  border:1px solid var(--line-new);
+  border-radius:16px;
+  background:#fff;
+  padding:13px;
+  display:flex;
+  align-items:center;
+  gap:11px;
+  text-align:left;
+  color:var(--black-new);
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.launcher-card:hover { transform:translateY(-2px);box-shadow:var(--soft-shadow-new); }
+.launcher-card.blue { border-top:3px solid var(--blue-main); }
+.launcher-card.orange { border-top:3px solid var(--orange-main); }
+.launcher-card.green { border-top:3px solid var(--forest-main); }
+.launcher-icon {
+  width:38px;height:38px;border-radius:11px;
+  display:grid;place-items:center;flex:0 0 auto;
+}
+.launcher-card.blue .launcher-icon { background:var(--blue-light-new);color:var(--blue-main); }
+.launcher-card.orange .launcher-icon { background:var(--orange-light-new);color:var(--orange-main); }
+.launcher-card.green .launcher-icon { background:var(--forest-light-new);color:var(--forest-main); }
+.launcher-copy { min-width:0;flex:1; }
+.launcher-copy strong { display:block;font-size:12px;font-weight:800; }
+.launcher-copy small { display:block;color:var(--grey-new);font-size:9px;line-height:1.35;margin-top:4px; }
+.launcher-arrow { color:var(--grey-new);font-size:15px;font-weight:700; }
+
+.card.glass {
+  background:#fff !important;
+  border:1px solid var(--line-new) !important;
+  box-shadow:var(--soft-shadow-new) !important;
+  backdrop-filter:none !important;
+}
+.section-header h3 { color:var(--black-new);font-weight:800; }
+.btn-ghost.sm { background:var(--blue-light-new);color:var(--blue-main);border:0; }
+.btn-primary { background:var(--orange-main);color:#fff;border:0; }
+.chip-type { background:var(--blue-light-new);color:var(--blue-main); }
+.quick-actions .qa-btn { background:#fff;border:1px solid var(--line-new); }
+.progress-track { background:#edf1ef; }
+.progress-fill { background:var(--orange-main) !important; }
+
+.bottom-nav, .only-mobile { display:none !important; }
+
+/* Tablet-first: use a wide, comfortable 2-column layout before desktop expansion. */
+@media (min-width: 700px) and (max-width: 1100px) {
+  .main { max-width:100%; padding:0 22px 70px; }
+  .topbar { margin-left:-22px;margin-right:-22px;padding-left:22px;padding-right:22px; }
+  .launcher-grid { grid-template-columns:repeat(3,1fr); }
+  .dash-grid-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .greeting-card { padding:22px; }
+}
+
+/* Phone-first: compact, touch-friendly cards and no sidebar/nav drawer. */
+@media (max-width: 699px) {
+  .main { padding:0 14px 42px; }
+  .topbar {
+    min-height:68px;
+    margin-left:-14px;margin-right:-14px;
+    padding:10px 14px;
+  }
+  .topbar-page { display:none; }
+  .topbar-logo { width:38px;height:38px; }
+  .profile-mini { width:35px;height:35px; }
+  .greeting-card { padding:19px;border-radius:19px;align-items:flex-start; }
+  .greeting-card .greeting-name { font-size:22px; }
+  .countdown-pill { min-width:92px;padding:10px 9px; }
+  .countdown-pill .countdown-num { font-size:20px; }
+  .dashboard-launcher { padding:15px;border-radius:19px; }
+  .launcher-heading { align-items:flex-start; }
+  .launcher-heading h3 { font-size:16px; }
+  .launcher-hint { display:none; }
+  .launcher-grid { grid-template-columns:repeat(2,1fr);gap:8px; }
+  .launcher-card { min-height:84px;padding:11px;border-radius:14px;gap:8px; }
+  .launcher-icon { width:34px;height:34px;border-radius:10px; }
+  .launcher-copy strong { font-size:11px; }
+  .launcher-copy small { font-size:8.5px; }
+  .launcher-arrow { display:none; }
+  .card.glass { border-radius:18px !important; padding:15px; }
+  .dash-grid-2 { grid-template-columns:1fr; }
+}
