@@ -21,7 +21,7 @@ const SUBJECTS = [
   {
     id: "mathematics",
     name: "Mathematics",
-    color: "#2D6A4F",
+    color: "#2F6FA8",
     chapters: [
       { id: "m01", name: "GST (Goods and Services Tax)" },
       { id: "m02", name: "Banking — Recurring Deposit Accounts" },
@@ -50,7 +50,7 @@ const SUBJECTS = [
   {
     id: "physics",
     name: "Physics",
-    color: "#1B4332",
+    color: "#14406B",
     chapters: [
       { id: "p01", name: "Force, Work, Power and Energy" },
       { id: "p02", name: "Light — Refraction Through a Lens" },
@@ -66,7 +66,7 @@ const SUBJECTS = [
   {
     id: "chemistry",
     name: "Chemistry",
-    color: "#40916C",
+    color: "#E8792F",
     chapters: [
       { id: "c01", name: "Periodic Properties & Periodicity" },
       { id: "c02", name: "Chemical Bonding" },
@@ -85,7 +85,7 @@ const SUBJECTS = [
   {
     id: "biology",
     name: "Biology",
-    color: "#52B788",
+    color: "#C9812F",
     chapters: [
       { id: "b01", name: "Cell Cycle and Cell Division" },
       { id: "b02", name: "Genetics" },
@@ -103,7 +103,7 @@ const SUBJECTS = [
   {
     id: "english-language",
     name: "English Language",
-    color: "#74A57F",
+    color: "#5B8FBF",
     chapters: [
       { id: "el01", name: "Composition / Essay Writing" },
       { id: "el02", name: "Formal & Official Email Writing" },
@@ -115,7 +115,7 @@ const SUBJECTS = [
   {
     id: "english-literature",
     name: "English Literature",
-    color: "#588157",
+    color: "#D98A4A",
     chapters: [
       { id: "eli01", name: "Prescribed Drama" },
       { id: "eli02", name: "Prescribed Novel" },
@@ -126,7 +126,7 @@ const SUBJECTS = [
   {
     id: "history-civics",
     name: "History & Civics",
-    color: "#3A5A40",
+    color: "#1F4E79",
     chapters: [
       { id: "hc01", name: "Civics — The Union Legislature" },
       { id: "hc02", name: "Civics — The Union Executive" },
@@ -147,7 +147,7 @@ const SUBJECTS = [
   {
     id: "geography",
     name: "Geography",
-    color: "#606C38",
+    color: "#B5651D",
     chapters: [
       { id: "g01", name: "Map Reading & Interpretation" },
       { id: "g02", name: "Location, Extent and Physical Features" },
@@ -166,7 +166,7 @@ const SUBJECTS = [
   {
     id: "computer-applications",
     name: "Computer Applications",
-    color: "#2F6690",
+    color: "#3E7CB1",
     chapters: [
       { id: "ca01", name: "Review of Java Fundamentals" },
       { id: "ca02", name: "Class as the Basis of a Solution" },
@@ -181,7 +181,7 @@ const SUBJECTS = [
   {
     id: "second-language",
     name: "Second Language",
-    color: "#A68A64",
+    color: "#8C6A4F",
     chapters: [
       { id: "sl01", name: "Comprehension" },
       { id: "sl02", name: "Grammar" },

@@ -179,17 +179,11 @@ document.addEventListener("click", (e) => {
     case "navigate":
       App._justNavigated = true;
       App.setView(el.dataset.view);
-      document.getElementById("sidebar")?.classList.remove("open");
-      document.querySelector(".scrim")?.classList.remove("show");
+      closeModal();
       window.scrollTo({ top: 0, behavior: "smooth" });
       break;
-    case "open-sidebar":
-      document.getElementById("sidebar").classList.add("open");
-      document.querySelector(".scrim").classList.add("show");
-      break;
-    case "close-sidebar":
-      document.getElementById("sidebar").classList.remove("open");
-      document.querySelector(".scrim").classList.remove("show");
+    case "open-more":
+      openModal(renderMoreSheet(App.getView()));
       break;
 
     // ---- Onboarding ----

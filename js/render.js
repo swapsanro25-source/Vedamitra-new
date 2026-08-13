@@ -60,118 +60,95 @@ const NAV_ITEMS = [
 const BOTTOM_NAV_ITEMS = ["dashboard", "subjects", "batch", "homework"];
 
 // ---------------------------------------------------------------------
-// Shell — Dashboard-first, mobile/tablet-first
+// Shell
 // ---------------------------------------------------------------------
 function renderShell() {
   const state = App.getState();
   if (!state.onboarded) return renderOnboarding();
 
   const view = App.getView();
-  const currentItem =
-    NAV_ITEMS.find((item) => item.id === view) ||
-    NAV_ITEMS.find((item) => item.id === "dashboard");
-
   return `
-    <main class="main dashboard-first">
-      <header class="topbar premium-topbar">
-        <div class="topbar-left">
-          ${
-            view !== "dashboard"
-              ? `
-                <button class="back-link" data-action="navigate" data-view="dashboard" aria-label="Back to dashboard">
-                  ${iconEl("chevronLeft")}
-                  <span>Dashboard</span>
-                </button>
-              `
-              : ""
-          }
-          <div class="topbar-heading">
-            <span class="topbar-kicker">VEDAMITRA</span>
-            <h1 class="topbar-title">${escapeHtml(currentItem?.label || "Dashboard")}</h1>
-          </div>
+    <div class="app-shell">
+      <header class="topbar-new">
+        <div class="brand-mini">
+          <img src="assets/logo.svg" alt="VEDAMITRA" />
+          <span>VEDAMITRA</span>
         </div>
-
-        <div class="topbar-actions">
-          <button class="icon-btn" data-action="navigate" data-view="settings" aria-label="Settings">
-            ${iconEl("settings")}
-          </button>
-          <img src="assets/logo.svg" alt="VEDAMITRA" class="topbar-logo" />
+        <nav class="top-nav only-wide">
+          ${NAV_ITEMS.map(
+            (item) => `
+            <button class="top-nav-item ${view === item.id ? "active" : ""}" data-action="navigate" data-view="${item.id}">
+              ${iconEl(item.icon)}<span>${item.label}</span>
+            </button>`
+          ).join("")}
+        </nav>
+        <div class="topbar-right">
+          ${examCountdownMini(state)}
+          <button class="icon-btn only-narrow" data-action="open-more">${Icon.menu}</button>
         </div>
       </header>
-
-      <div class="view-root" id="view-root">
-        ${renderView(view)}
-      </div>
-
-      ${
-        view === "dashboard"
-          ? renderDashboardNavigation()
-          : renderCompactNavigation(view)
-      }
-    </main>
-
-    <div class="modal-layer" id="modal-layer"></div>
+      <main class="main">
+        <div class="view-root" id="view-root">${renderView(view)}</div>
+        ${renderBottomNav(view)}
+      </main>
+      <div class="modal-layer" id="modal-layer"></div>
+    </div>
   `;
 }
 
-function renderDashboardNavigation() {
-  const items = [
-    { id: "subjects", title: "Subjects", subtitle: "Chapters & progress", icon: "subjects", tone: "orange" },
-    { id: "batch", title: "Batch Classes", subtitle: "Today's & upcoming classes", icon: "cap", tone: "blue" },
-    { id: "revision", title: "Revision", subtitle: "Revision schedule", icon: "revision", tone: "sky" },
-    { id: "weekly-target", title: "Weekly Target", subtitle: "Track your weekly goals", icon: "target", tone: "green" },
-    { id: "homework", title: "Homework", subtitle: "Pending & completed", icon: "homework", tone: "orange" },
-    { id: "exams", title: "Tests & Exams", subtitle: "Upcoming examinations", icon: "exams", tone: "blue" },
-    { id: "notes", title: "Notes", subtitle: "Your saved notes", icon: "notes", tone: "sky" },
-    { id: "resources", title: "Resources", subtitle: "CISCE & study resources", icon: "compass", tone: "green" }
-  ];
-
+function renderMoreSheet(view) {
+  const rest = NAV_ITEMS.filter((n) => !BOTTOM_NAV_ITEMS.includes(n.id));
   return `
-    <section class="dashboard-navigation">
-      <div class="dashboard-navigation-header">
-        <p class="section-kicker">STUDY HUB</p>
-        <h3>What do you want to work on?</h3>
-      </div>
-
-      <div class="dashboard-nav-grid">
-        ${items.map((item) => `
-          <button type="button"
-            class="dashboard-nav-card tone-${item.tone}"
-            data-action="navigate"
-            data-view="${item.id}">
-            <span class="dashboard-nav-icon">${iconEl(item.icon)}</span>
-            <span class="dashboard-nav-content">
-              <strong>${escapeHtml(item.title)}</strong>
-              <small>${escapeHtml(item.subtitle)}</small>
-            </span>
-            <span class="dashboard-nav-arrow">${iconEl("chevronRight")}</span>
-          </button>
-        `).join("")}
-      </div>
-    </section>
+    <h3>More</h3>
+    <div class="more-sheet-list">
+      ${rest.map(
+        (item) => `<button class="more-sheet-item ${view === item.id ? "active" : ""}" data-action="navigate" data-view="${item.id}">
+          ${iconEl(item.icon)}<span>${item.label}</span>${iconEl("chevronRight", "more-caret")}
+        </button>`
+      ).join("")}
+    </div>
   `;
 }
 
-function renderCompactNavigation(view) {
-  return `
-    <nav class="compact-bottom-nav">
-      <button class="${view === "subjects" ? "active" : ""}" data-action="navigate" data-view="subjects">
-        ${iconEl("subjects")}<span>Subjects</span>
-      </button>
-      <button class="${view === "batch" ? "active" : ""}" data-action="navigate" data-view="batch">
-        ${iconEl("cap")}<span>Classes</span>
-      </button>
-      <button class="${view === "revision" ? "active" : ""}" data-action="navigate" data-view="revision">
-        ${iconEl("revision")}<span>Revision</span>
-      </button>
-      <button class="${view === "homework" ? "active" : ""}" data-action="navigate" data-view="homework">
-        ${iconEl("homework")}<span>Homework</span>
-      </button>
-      <button data-action="navigate" data-view="dashboard">
-        ${iconEl("dashboard")}<span>Home</span>
-      </button>
-    </nav>
-  `;
+function renderBottomNav(view) {
+  return `<nav class="bottom-nav only-narrow">
+    ${BOTTOM_NAV_ITEMS.map((id) => {
+      const item = NAV_ITEMS.find((n) => n.id === id);
+      return `<button class="bottom-nav-item ${view === id ? "active" : ""}" data-action="navigate" data-view="${id}">
+        ${iconEl(item.icon)}<span>${item.label.split(" ")[0]}</span>
+      </button>`;
+    }).join("")}
+    <button class="bottom-nav-item" data-action="open-more">${iconEl("menu")}<span>More</span></button>
+  </nav>`;
+}
+
+function examCountdownMini(state) {
+  const exams = App.selectors.upcomingExams(1);
+  if (!exams.length) return "";
+  const days = App.selectors.daysUntil(exams[0].date);
+  return `<div class="mini-countdown">
+    <span class="mini-countdown-label">Next Exam</span>
+    <span class="mini-countdown-days">${days}d</span>
+    <span class="mini-countdown-name">${escapeHtml(exams[0].name)}</span>
+  </div>`;
+}
+
+function renderView(view) {
+  switch (view) {
+    case "dashboard": return renderDashboard();
+    case "subjects": return renderSubjects();
+    case "batch": return renderBatch();
+    case "revision": return renderRevision();
+    case "weekly-target": return renderWeeklyTargets();
+    case "homework": return renderHomework();
+    case "exams": return renderExams();
+    case "notes": return renderNotes();
+    case "resources": return renderResources();
+    case "settings": return renderSettings();
+    default:
+      if (view.startsWith("subject:")) return renderSubjectDetail(view.split(":")[1]);
+      return renderDashboard();
+  }
 }
 
 // ---------------------------------------------------------------------
