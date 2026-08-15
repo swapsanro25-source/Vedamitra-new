@@ -1,16 +1,24 @@
 /**
- * VEDAMITRA 2.0 — Rendering
+ * VEDAMITRA 3.0 — Rendering
  * ---------------------------
  * Every view is a pure function of `App.getState()` that returns an HTML
- * string. `renderApp()` swaps #app-root's innerHTML on every state change.
- * Interactivity is handled by delegated listeners in app.js reading
- * `data-action` attributes.
+ * string, swapped into #app-root on every state change (see app.js).
+ *
+ * ONE DELIBERATE EXCEPTION: chapter expand/collapse. That interaction is
+ * handled entirely in app.js via direct DOM class toggling — it never calls
+ * an App.action or App.setView, so it never triggers a re-render. This is
+ * both how the CSS grid expand animation is able to play at all (a freshly
+ * rebuilt element can't transition from a "before" state) and, as a side
+ * effect, why the old "editing a field inside an open chapter collapses it"
+ * bug structurally cannot happen here — the chapter's open/closed state
+ * lives only in the DOM and in `state._openChapters` (a same-session,
+ * never-persisted convenience map used purely to re-apply the right class
+ * when a *different* action does cause a full re-render).
  */
 
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }
-
 function formatDateLong(iso) {
   if (!iso) return "—";
   return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -32,9 +40,17 @@ function emptyState(icon, title, subtitle) {
 function sectionHeader(title, action) {
   return `<div class="section-header"><h3>${escapeHtml(title)}</h3>${action || ""}</div>`;
 }
+function arcSvg(pct, size, strokeW) {
+  const r = (size - strokeW) / 2, c = 2 * Math.PI * r, offset = c - (Math.max(0, Math.min(100, pct)) / 100) * c;
+  const cx = size / 2;
+  return `<svg viewBox="0 0 ${size} ${size}" class="arc">
+    <circle cx="${cx}" cy="${cx}" r="${r}" class="arc-track" stroke-width="${strokeW}" />
+    <circle cx="${cx}" cy="${cx}" r="${r}" class="arc-fill" stroke-width="${strokeW}" stroke-dasharray="${c}" stroke-dashoffset="${offset}" />
+  </svg>`;
+}
 
-// Independent, persistent chapter checklist items. Each is its own boolean
-// field on the chapter object — ticking one never affects the others.
+// Independent, persistent chapter checklist items — ticking one never
+// affects the others.
 const CHAPTER_CHECK_FIELDS = [
   ["theory", "Theory"],
   ["exercises", "Exercises"],
@@ -48,16 +64,16 @@ const CHAPTER_CHECK_FIELDS = [
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "dashboard" },
   { id: "subjects", label: "Subjects", icon: "subjects" },
-  { id: "batch", label: "Batch Classes", icon: "cap" },
+  { id: "batch", label: "Batch", icon: "cap" },
+  { id: "homework", label: "Homework", icon: "homework" },
   { id: "revision", label: "Revision", icon: "revision" },
   { id: "weekly-target", label: "Weekly Target", icon: "target" },
-  { id: "homework", label: "Homework", icon: "homework" },
-  { id: "exams", label: "Upcoming Exams", icon: "exams" },
+  { id: "exams", label: "Exams", icon: "exams" },
   { id: "notes", label: "Notes", icon: "notes" },
   { id: "resources", label: "Resources", icon: "compass" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
-const BOTTOM_NAV_ITEMS = ["dashboard", "subjects", "batch", "homework"];
+const DOCK_ITEMS = ["dashboard", "subjects", "batch", "homework"];
 
 // ---------------------------------------------------------------------
 // Shell
@@ -69,36 +85,37 @@ function renderShell() {
   const view = App.getView();
   return `
     <div class="app-shell">
-      <header class="topbar-new">
-        <div class="brand-mini">
-          <img src="assets/logo.svg" alt="VEDAMITRA" />
-          <span>VEDAMITRA</span>
-        </div>
-        <nav class="top-nav only-wide">
-          ${NAV_ITEMS.map(
-            (item) => `
-            <button class="top-nav-item ${view === item.id ? "active" : ""}" data-action="navigate" data-view="${item.id}">
-              ${iconEl(item.icon)}<span>${item.label}</span>
-            </button>`
-          ).join("")}
-        </nav>
-        <div class="topbar-right">
-          ${examCountdownMini(state)}
-          <button class="icon-btn only-narrow" data-action="open-more">${Icon.menu}</button>
+      <header class="top-strip">
+        <div class="brand-mini"><img src="assets/logo.svg" alt="VEDAMITRA" /><span>VEDAMITRA</span></div>
+        <div class="top-strip-actions">
+          <button class="icon-btn" data-action="navigate" data-view="settings" aria-label="Settings">${Icon.settings}</button>
         </div>
       </header>
       <main class="main">
         <div class="view-root" id="view-root">${renderView(view)}</div>
-        ${renderBottomNav(view)}
       </main>
+      ${renderDock(view)}
       <div class="modal-layer" id="modal-layer"></div>
     </div>
   `;
 }
 
+function renderDock(view) {
+  return `<nav class="dock">
+    ${DOCK_ITEMS.map((id) => {
+      const item = NAV_ITEMS.find((n) => n.id === id);
+      return `<button class="dock-item ${view === id ? "active" : ""}" data-action="navigate" data-view="${id}">
+        ${iconEl(item.icon)}<span>${item.label}</span>
+      </button>`;
+    }).join("")}
+    <button class="dock-item ${!DOCK_ITEMS.includes(view) ? "active" : ""}" data-action="open-more">${iconEl("menu")}<span>More</span></button>
+  </nav>`;
+}
+
 function renderMoreSheet(view) {
-  const rest = NAV_ITEMS.filter((n) => !BOTTOM_NAV_ITEMS.includes(n.id));
+  const rest = NAV_ITEMS.filter((n) => !DOCK_ITEMS.includes(n.id));
   return `
+    <div class="sheet-grabber"></div>
     <h3>More</h3>
     <div class="more-sheet-list">
       ${rest.map(
@@ -108,29 +125,6 @@ function renderMoreSheet(view) {
       ).join("")}
     </div>
   `;
-}
-
-function renderBottomNav(view) {
-  return `<nav class="bottom-nav only-narrow">
-    ${BOTTOM_NAV_ITEMS.map((id) => {
-      const item = NAV_ITEMS.find((n) => n.id === id);
-      return `<button class="bottom-nav-item ${view === id ? "active" : ""}" data-action="navigate" data-view="${id}">
-        ${iconEl(item.icon)}<span>${item.label.split(" ")[0]}</span>
-      </button>`;
-    }).join("")}
-    <button class="bottom-nav-item" data-action="open-more">${iconEl("menu")}<span>More</span></button>
-  </nav>`;
-}
-
-function examCountdownMini(state) {
-  const exams = App.selectors.upcomingExams(1);
-  if (!exams.length) return "";
-  const days = App.selectors.daysUntil(exams[0].date);
-  return `<div class="mini-countdown">
-    <span class="mini-countdown-label">Next Exam</span>
-    <span class="mini-countdown-days">${days}d</span>
-    <span class="mini-countdown-name">${escapeHtml(exams[0].name)}</span>
-  </div>`;
 }
 
 function renderView(view) {
@@ -160,15 +154,12 @@ function renderOnboarding() {
   const state = App.getState();
   const step = state._onboardingStep || 0;
   const draft = state._onboardingDraft || { ...state.profile, exams: [] };
-  state._onboardingDraft = draft; // keep reference stable across re-renders
+  state._onboardingDraft = draft;
 
   return `
     <div class="onboarding">
-      <div class="onboarding-card glass">
-        <div class="onboarding-brand">
-          <img src="assets/logo.svg" alt="VEDAMITRA" />
-          <span>VEDAMITRA</span>
-        </div>
+      <div class="onboarding-card">
+        <div class="onboarding-brand"><img src="assets/logo.svg" alt="VEDAMITRA" /><span>VEDAMITRA</span></div>
         <div class="onboarding-progress">
           ${ONBOARDING_STEPS.map((s, i) => `<span class="ob-dot ${i === step ? "active" : ""} ${i < step ? "done" : ""}"></span>`).join("")}
         </div>
@@ -193,7 +184,7 @@ function renderOnboardingStep(step, d) {
         <label>Academic year<input type="text" data-ob-field="academicYear" value="${escapeHtml(d.academicYear)}" /></label>
         <label>School / coaching name<input type="text" data-ob-field="schoolName" value="${escapeHtml(d.schoolName)}" placeholder="Optional" /></label>
       </div>
-      ${obNav(0, true)}
+      ${obNav(0)}
     `;
   }
   if (step === 1) {
@@ -207,21 +198,21 @@ function renderOnboardingStep(step, d) {
             <span>${s.name}</span>
           </label>`).join("")}
       </div>
-      ${obNav(1, true)}
+      ${obNav(1)}
     `;
   }
   if (step === 2) {
     return `
       <h2>Your batch</h2>
-      <p class="muted">Optional — note your coaching/batch schedule. You can add individual classes and lecture counts anytime from Batch Classes and each Subject page.</p>
+      <p class="muted">Optional — note your coaching/batch schedule. Add individual classes and lecture counts anytime from Batch Classes and each Subject page.</p>
       <label class="field-block">Batch schedule notes<textarea rows="4" data-ob-field="batchScheduleNote" placeholder="e.g. Physics batch — Mon/Wed/Fri 6-7pm">${escapeHtml(d.batchScheduleNote)}</textarea></label>
-      ${obNav(2, true)}
+      ${obNav(2)}
     `;
   }
   if (step === 3) {
     return `
       <h2>Upcoming tests</h2>
-      <p class="muted">Add any exams you already know about. You can add more later from Upcoming Exams.</p>
+      <p class="muted">Add any exams you already know about. You can add more later.</p>
       <div class="ob-exam-rows">
         ${(d.exams || []).map((e, i) => `
           <div class="ob-exam-row">
@@ -237,7 +228,7 @@ function renderOnboardingStep(step, d) {
         <label>Date<input type="date" id="ob-exam-date" /></label>
         <label>&nbsp;<button type="button" class="btn-ghost sm" data-action="ob-add-exam">${iconEl("plus")}Add</button></label>
       </div>
-      ${obNav(3, false)}
+      ${obNav(3)}
     `;
   }
   if (step === 4) {
@@ -252,10 +243,9 @@ function renderOnboardingStep(step, d) {
             <span>${day}</span>
           </label>`).join("")}
       </div>
-      ${obNav(4, true)}
+      ${obNav(4)}
     `;
   }
-  // step 5 — finish
   return `
     <h2>You're all set, ${escapeHtml(d.studentName || "there")}</h2>
     <p class="muted">Here's a quick summary — you can change any of this later in Settings.</p>
@@ -271,8 +261,7 @@ function renderOnboardingStep(step, d) {
     </div>
   `;
 }
-
-function obNav(step, showNext) {
+function obNav(step) {
   return `<div class="modal-actions">
     ${step > 0 ? `<button type="button" class="btn-ghost sm" data-action="ob-back">${iconEl("chevronLeft")}Back</button>` : "<span></span>"}
     <button type="button" class="btn-primary sm" data-action="ob-next">Continue${iconEl("chevronRight")}</button>
@@ -280,7 +269,8 @@ function obNav(step, showNext) {
 }
 
 // ---------------------------------------------------------------------
-// Dashboard — redesigned hierarchy with progressive disclosure
+// Dashboard — hero + dominant focus card + compact plan strip, then a
+// two-column composition (progress/upcoming) on wide screens.
 // ---------------------------------------------------------------------
 function renderDashboard() {
   const state = App.getState();
@@ -293,132 +283,158 @@ function renderDashboard() {
   const batchToday = s.todaysBatchClasses();
   const hwToday = s.todaysHomework();
   const dueRevisions = s.revisionsDueToday();
-  const exams = s.upcomingExams(2);
+  const nextExam = s.upcomingExams(1)[0];
+  const nextBatch = batchToday.find((c) => !c.completed) || s.upcomingBatchClasses(1)[0];
+  const firstOpenTask = plan && plan.find((t) => !t.done);
 
   return `
-    <section class="greeting-card glass">
-      <div>
-        <p class="greeting-eyebrow">${greeting}</p>
-        <h2 class="greeting-name">${escapeHtml(name)}</h2>
-        <p class="greeting-sub">Your study overview for today</p>
-      </div>
-      ${examCountdownCard(state)}
-    </section>
-
-    <section class="card glass">
-      ${sectionHeader("Today's Study Plan", `<button class="btn-ghost sm" data-action="generate-plan">${iconEl("sparkle")}Regenerate</button>`)}
-      ${plan && plan.length ? renderPlanTasks(plan) : renderPlanEmpty()}
-    </section>
-
-    <section class="card glass">
-      ${sectionHeader("Today's Batch Classes", `<button class="btn-ghost sm" data-action="navigate" data-view="batch">${iconEl("plus")}Manage</button>`)}
-      ${batchToday.length ? renderBatchRows(batchToday) : emptyState("cap", "No classes today", "Add today's batch schedule from Batch Classes.")}
-    </section>
-
-    <div class="dash-grid-2">
-      <section class="card glass">
-        ${sectionHeader("Pending Homework", hwToday.length ? `<span class="count-badge">${hwToday.length}</span>` : "")}
-        ${hwToday.length
-          ? `<ul class="mini-list">${hwToday.map((h) => `
-              <li><span class="dot" style="background:var(--gold)"></span>
-                <span class="mini-list-text">${escapeHtml(h.subject)} — ${escapeHtml(h.description)}</span>
-                <button class="icon-btn xs" data-action="complete-homework" data-id="${h.id}">${Icon.check}</button></li>`).join("")}</ul>`
-          : emptyState("homework", "Nothing due today", "")}
-      </section>
-      <section class="card glass">
-        ${sectionHeader("Revision Due", dueRevisions.length ? `<span class="count-badge">${dueRevisions.length}</span>` : "")}
-        ${dueRevisions.length
-          ? `<ul class="mini-list">${dueRevisions.slice(0, 4).map((r) => `
-              <li><span class="dot" style="background:${r.color}"></span>
-                <span class="mini-list-text">${escapeHtml(r.subjectName)} · ${escapeHtml(r.chapterName)}</span>
-                <button class="icon-btn xs" data-action="complete-revision" data-subject="${r.subjectId}" data-chapter="${r.chapterId}" data-index="${r.index}">${Icon.check}</button></li>`).join("")}</ul>`
-          : emptyState("check", "All caught up", "")}
-      </section>
+    <div class="hero">
+      <p class="hero-eyebrow">${greeting}</p>
+      <h1 class="hero-name">${escapeHtml(name)}</h1>
+      ${nextExam
+        ? `<span class="hero-exam-pill"><span class="num">${s.daysUntil(nextExam.date)}</span>days to ${escapeHtml(nextExam.name)}</span>`
+        : `<span class="hero-exam-pill">Add your board exam date in Settings</span>`}
     </div>
 
-    <section class="card glass">
-      ${sectionHeader("Upcoming Test / Exam", `<button class="btn-ghost sm" data-action="navigate" data-view="exams">View all</button>`)}
-      ${exams.length
-        ? `<ul class="mini-list">${exams.map((e) => `
-            <li><span class="dot" style="background:var(--forest)"></span>
-              <span class="mini-list-text">${escapeHtml(e.name)} · ${escapeHtml(e.subject)} <span class="muted">(${escapeHtml(e.type || "Exam")})</span></span>
-              <span class="muted">${s.daysUntil(e.date)}d</span></li>`).join("")}</ul>`
-        : emptyState("exams", "No exams added", "")}
-    </section>
-
-    <details class="card glass disclosure">
-      <summary>${sectionHeader("Weekly Target")}</summary>
-      ${renderWeeklyTargetSummary(state.weeklyTargets)}
-    </details>
-
-    <details class="card glass disclosure">
-      <summary>${sectionHeader("Subject Progress", `<span class="muted">${overall.pct}% overall</span>`)}</summary>
-      <div class="subject-progress-list">
-        ${SUBJECTS.filter((s2) => state.profile.subjects.includes(s2.id)).map((s2) => {
-          const p = s.subjectProgress(s2.id);
-          return `<div class="subject-progress-row" data-action="navigate" data-view="subject:${s2.id}">
-            <span class="dot" style="background:${s2.color}"></span>
-            <span class="subject-progress-name">${escapeHtml(s2.name)}</span>
-            ${progressBar(p.pct, s2.color)}
-            <span class="muted">${p.pct}%</span>
-          </div>`;
-        }).join("")}
+    <div class="dash-two-col">
+      <div class="dash-two-col-left">
+        ${renderFocusCard(firstOpenTask, plan)}
+        <div class="card">
+          ${sectionHeader("Today's Batch Classes", `<button class="btn-ghost sm" data-action="navigate" data-view="batch">${iconEl("plus")}Manage</button>`)}
+          ${batchToday.length ? renderBatchRows(batchToday) : emptyState("cap", "No classes today", "Add today's batch schedule from Batch Classes.")}
+        </div>
+        <div class="card">
+          ${sectionHeader("Pending Homework", hwToday.length ? `<span class="count-badge">${hwToday.length}</span>` : "")}
+          ${hwToday.length
+            ? `<ul class="mini-list">${hwToday.map((h) => `
+                <li><span class="dot" style="background:var(--accent)"></span>
+                  <span class="mini-list-text">${escapeHtml(h.subject)} — ${escapeHtml(h.description)}</span>
+                  <button class="icon-btn xs" data-action="complete-homework" data-id="${h.id}">${Icon.check}</button></li>`).join("")}</ul>`
+            : emptyState("homework", "Nothing due today", "")}
+        </div>
       </div>
-    </details>
 
-    <section class="card glass quick-actions">
+      <div class="dash-two-col-right">
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="arc-wrap">
+              ${arcSvg(overall.pct, 84, 8)}
+              <div><div class="arc-num">${overall.pct}%</div><div class="arc-label">Overall progress</div></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            ${renderWeeklyTargetSummary(state.weeklyTargets)}
+          </div>
+        </div>
+
+        <div class="card">
+          ${sectionHeader("Revision Due", dueRevisions.length ? `<span class="count-badge">${dueRevisions.length}</span>` : "")}
+          ${dueRevisions.length
+            ? `<ul class="mini-list">${dueRevisions.slice(0, 4).map((r) => `
+                <li><span class="dot" style="background:${r.color}"></span>
+                  <span class="mini-list-text">${escapeHtml(r.subjectName)} · ${escapeHtml(r.chapterName)}</span>
+                  <button class="icon-btn xs" data-action="complete-revision" data-subject="${r.subjectId}" data-chapter="${r.chapterId}" data-index="${r.index}">${Icon.check}</button></li>`).join("")}</ul>`
+            : emptyState("check", "All caught up", "")}
+        </div>
+
+        <div class="card">
+          ${sectionHeader("Upcoming")}
+          <div class="upcoming-grid">
+            <div class="upcoming-tile">
+              <div class="upcoming-tile-icon violet">${iconEl("cap")}</div>
+              <p class="upcoming-tile-title">Next Class</p>
+              <p class="upcoming-tile-sub">${nextBatch ? `${escapeHtml(nextBatch.subject)} · ${formatDateShort(nextBatch.date)}` : "None scheduled"}</p>
+            </div>
+            <div class="upcoming-tile">
+              <div class="upcoming-tile-icon amber">${iconEl("exams")}</div>
+              <p class="upcoming-tile-title">Next Test</p>
+              <p class="upcoming-tile-sub">${nextExam ? `${escapeHtml(nextExam.name)} · ${s.daysUntil(nextExam.date)}d` : "None added"}</p>
+            </div>
+            <div class="upcoming-tile">
+              <div class="upcoming-tile-icon cyan">${iconEl("revision")}</div>
+              <p class="upcoming-tile-title">Next Revision</p>
+              <p class="upcoming-tile-sub">${dueRevisions[0] ? escapeHtml(dueRevisions[0].chapterName) : "Nothing due"}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       ${sectionHeader("Quick Actions")}
-      <div class="qa-grid">
-        <button class="qa-btn" data-action="open-add-batch">${iconEl("plus")}Batch Class</button>
-        <button class="qa-btn" data-action="open-add-homework">${iconEl("plus")}Homework</button>
-        <button class="qa-btn" data-action="open-add-exam">${iconEl("plus")}Exam</button>
-        <button class="qa-btn" data-action="open-add-note">${iconEl("plus")}Note</button>
+      <div class="nav-cards">
+        ${[
+          ["subjects", "Subjects", "subjects"],
+          ["revision", "Revision", "revision"],
+          ["weekly-target", "Targets", "target"],
+          ["exams", "Tests", "exams"],
+          ["notes", "Notes", "notes"],
+          ["resources", "Resources", "compass"],
+        ].map(([view, label, icon]) => `
+          <button class="nav-card" data-action="navigate" data-view="${view}">
+            <span class="nav-card-icon">${iconEl(icon)}</span>${label}
+          </button>`).join("")}
       </div>
-    </section>
+    </div>
   `;
 }
 
-function examCountdownCard(state) {
-  const exams = App.selectors.upcomingExams(1);
-  if (!exams.length) {
-    return `<div class="countdown-pill muted">${state.settings.boardExamDate ? `Boards in ${App.selectors.daysUntil(state.settings.boardExamDate)} days` : "Add your board exam date in Settings"}</div>`;
+function renderFocusCard(task, plan) {
+  if (!plan) {
+    return `<div class="focus-card focus-empty">
+      <p class="focus-eyebrow">Today's Focus</p>
+      <p class="focus-title">No plan generated yet</p>
+      <p class="focus-sub">VEDAMITRA can build today's plan from batch classes, revisions, homework and weak chapters.</p>
+      <button class="btn-primary" data-action="generate-plan">${iconEl("sparkle")}Generate Today's Plan</button>
+    </div>`;
   }
-  const days = App.selectors.daysUntil(exams[0].date);
-  return `<div class="countdown-pill"><span class="countdown-num">${days}</span><span>days to ${escapeHtml(exams[0].name)}</span></div>`;
+  if (!task) {
+    return `<div class="focus-card focus-empty">
+      <p class="focus-eyebrow">Today's Focus</p>
+      <p class="focus-title">Every task is complete</p>
+      <p class="focus-sub">Nice work — you've finished everything in today's plan.</p>
+      <button class="btn-primary" data-action="generate-plan">${iconEl("sparkle")}Regenerate</button>
+    </div>${renderPlanStrip(plan)}`;
+  }
+  const idx = plan.indexOf(task);
+  return `<div class="focus-card">
+    <p class="focus-eyebrow">Today's Focus</p>
+    <p class="focus-title">${escapeHtml(task.subject)} — ${escapeHtml(task.chapter)}</p>
+    <p class="focus-sub">${escapeHtml(task.task)}</p>
+    <div class="focus-meta">
+      <span class="focus-meta-item">${iconEl("clock")}${task.duration} min</span>
+      <span class="focus-meta-item">${iconEl("sparkle")}${escapeHtml(task.type || "")}</span>
+      <span class="focus-meta-item">${escapeHtml(task.priority || "Medium")} priority</span>
+    </div>
+    <button class="btn-primary" data-action="toggle-plan-task" data-index="${idx}">${iconEl("check")}Mark as done</button>
+  </div>${renderPlanStrip(plan)}`;
 }
 
-function renderPlanTasks(tasks) {
-  return `<ul class="plan-list">
-    ${tasks.map((t, i) => `
-      <li class="plan-item ${t.done ? "done" : ""}">
-        <button class="check-circle" data-action="toggle-plan-task" data-index="${i}">${t.done ? Icon.check : ""}</button>
-        <div class="plan-item-body">
-          <p class="plan-item-title">${escapeHtml(t.subject)} — ${escapeHtml(t.chapter)}</p>
-          <p class="plan-item-sub"><span class="chip chip-type">${escapeHtml(t.type || "")}</span> ${escapeHtml(t.task)} ${t.carriedOver ? '<span class="chip chip-high">Carried over</span>' : ""}</p>
+function renderPlanStrip(plan) {
+  return `<div class="plan-strip">
+    ${plan.map((t, i) => `
+      <div class="plan-chip ${t.done ? "done" : ""}">
+        <div class="plan-chip-top">
+          <span class="plan-chip-type">${escapeHtml(t.type || "")}</span>
+          <button class="check-circle ${t.done ? "checked" : ""}" data-action="toggle-plan-task" data-index="${i}">${t.done ? Icon.check : ""}</button>
         </div>
-        <span class="muted">${t.duration}m</span>
-      </li>`).join("")}
-  </ul>`;
-}
-function renderPlanEmpty() {
-  return `<div class="empty-state">
-    ${iconEl("sparkle", "empty-icon")}
-    <p class="empty-title">No plan generated yet</p>
-    <p class="empty-subtitle">VEDAMITRA can build today's plan from batch classes, revisions, homework and weak chapters.</p>
-    <button class="btn-primary sm" data-action="generate-plan">${iconEl("sparkle")}Generate Today's Plan</button>
+        <p class="plan-chip-title">${escapeHtml(t.subject)}</p>
+        <p class="plan-chip-sub">${escapeHtml(t.chapter)}</p>
+        <div class="plan-chip-foot"><span class="muted">${t.duration}m</span></div>
+      </div>`).join("")}
   </div>`;
 }
+
 function renderWeeklyTargetSummary(targets) {
-  if (!targets.length) return emptyState("target", "No target set", "Create a weekly target from the Weekly Target tab.");
-  return `<div class="target-grid compact">${targets.slice(0, 3).map(renderTargetCard).join("")}</div>`;
-}
-function progressRing(pct) {
-  const r = 42, c = 2 * Math.PI * r, offset = c - (pct / 100) * c;
-  return `<svg viewBox="0 0 100 100" class="ring">
-      <circle cx="50" cy="50" r="${r}" class="ring-track" />
-      <circle cx="50" cy="50" r="${r}" class="ring-fill" stroke-dasharray="${c}" stroke-dashoffset="${offset}" />
-      <text x="50" y="55" text-anchor="middle" class="ring-text">${pct}%</text>
-    </svg>`;
+  if (!targets.length) return `<p class="arc-label" style="margin-bottom:8px;">Weekly Target</p>${emptyState("target", "No target set", "Create one from the Weekly Target tab.")}`;
+  const t = targets[0];
+  const pct = t.goal ? Math.min(100, Math.round((t.current / t.goal) * 100)) : 0;
+  return `
+    <p class="arc-label" style="margin-bottom:6px;">Weekly Target</p>
+    <p style="font-weight:700; font-size:0.92rem; margin-bottom:6px;">${escapeHtml(t.label)}</p>
+    ${progressBar(pct)}
+    <p class="muted">${t.current} / ${t.goal} · due ${formatDateShort(t.deadline)}</p>
+  `;
 }
 
 // ---------------------------------------------------------------------
@@ -429,19 +445,19 @@ function renderBatch() {
   const upcoming = App.selectors.upcomingBatchClasses(20);
   return `
     <div class="list-header">
+      <h2>Batch Classes</h2>
       <button class="btn-primary sm" data-action="open-add-batch">${iconEl("plus")}Add Class</button>
     </div>
-    <section class="card glass">
+    <div class="card">
       ${sectionHeader("Today")}
       ${today.length ? renderBatchRows(today, true) : emptyState("cap", "No classes today", "Add today's batch lecture to see it here.")}
-    </section>
-    <section class="card glass">
+    </div>
+    <div class="card">
       ${sectionHeader("Upcoming")}
       ${upcoming.length ? renderBatchRows(upcoming, true) : emptyState("calendar", "Nothing scheduled", "Add upcoming batch classes to plan ahead.")}
-    </section>
+    </div>
   `;
 }
-
 function renderBatchRows(list, withDelete) {
   return `<ul class="task-rows">
     ${list.map((c) => `
@@ -463,11 +479,12 @@ function renderSubjects() {
   const state = App.getState();
   const active = SUBJECTS.filter((s) => state.profile.subjects.includes(s.id));
   return `
+    <h2 style="margin-bottom:14px;">Subjects</h2>
     <div class="subject-grid">
       ${active.map((s) => {
         const p = App.selectors.subjectProgress(s.id);
         return `
-        <button class="subject-card glass" data-action="navigate" data-view="subject:${s.id}" style="--accent:${s.color}">
+        <button class="subject-card card" data-action="navigate" data-view="subject:${s.id}" style="--accent:${s.color}">
           <div class="subject-card-top">
             <span class="subject-dot" style="background:${s.color}"></span>
             <span class="muted">${p.completed}/${p.total}</span>
@@ -489,17 +506,25 @@ function renderSubjectDetail(subjectId) {
 
   return `
     <button class="back-link" data-action="navigate" data-view="subjects">${iconEl("chevronLeft")}All subjects</button>
-    <section class="subject-header glass" style="--accent:${subject.color}">
-      <div>
-        <h2>${escapeHtml(subject.name)}</h2>
-        <p class="muted">${p.completed} of ${p.total} chapters completed</p>
-      </div>
-      <div class="ring-wrap sm">${progressRing(p.pct)}</div>
-    </section>
+    <div class="subject-header" style="--accent:${subject.color}">
+      <div><h2>${escapeHtml(subject.name)}</h2><p class="muted">${p.completed} of ${p.total} chapters completed</p></div>
+      ${arcSvg(p.pct, 68, 7)}
+    </div>
     <div class="chapter-list">
       ${subject.chapters.map((c) => renderChapterCard(subject, c, state.subjects[subjectId].chapters[c.id])).join("")}
     </div>
   `;
+}
+
+// Purely a display-time calculation (not part of app state) combining every
+// independent completion signal into one glanceable percentage.
+function chapterOverallPct(chapter, lecP, dppP) {
+  const flags = CHAPTER_CHECK_FIELDS.map(([f]) => (chapter[f] ? 1 : 0));
+  let sum = flags.reduce((a, b) => a + b, 0);
+  let count = flags.length;
+  if (lecP.total > 0) { sum += lecP.completed / lecP.total; count += 1; }
+  if (dppP.total > 0) { sum += dppP.completed / dppP.total; count += 1; }
+  return count ? Math.round((sum / count) * 100) : 0;
 }
 
 function renderChapterCard(subject, chapterMeta, chapter) {
@@ -509,10 +534,11 @@ function renderChapterCard(subject, chapterMeta, chapter) {
   const nextRevision = (chapter.revisionSchedule || []).find((r) => !r.done);
   const openKey = subject.id + ":" + chapterMeta.id;
   const isOpen = !!(App.getState()._openChapters || {})[openKey];
+  const pct = chapterOverallPct(chapter, lecP, dppP);
 
   return `
-    <details class="chapter-card surface status-${chapter.status}" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" ${isOpen ? "open" : ""}>
-      <summary>
+    <div class="chapter-card status-${chapter.status} ${isOpen ? "expanded" : ""}" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">
+      <button type="button" class="chapter-summary" data-action="toggle-chapter">
         <span class="status-dot"></span>
         <span class="chapter-name">${escapeHtml(chapterMeta.name)}</span>
         <span class="chip-row">
@@ -521,76 +547,91 @@ function renderChapterCard(subject, chapterMeta, chapter) {
           <span class="chip chip-status">${statusLabel}</span>
         </span>
         ${iconEl("chevronRight", "summary-caret")}
-      </summary>
-      <div class="chapter-body">
-        <div class="status-toggle" role="group">
-          ${["not-started", "in-progress", "completed"].map(
-            (st) => `<button class="status-btn ${chapter.status === st ? "active" : ""}" data-action="set-chapter-status" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-status="${st}">${{ "not-started": "Not Started", "in-progress": "In Progress", completed: "Completed" }[st]}</button>`
-          ).join("")}
-        </div>
-
-        <div class="chapter-section">
-          <p class="chapter-section-title">${iconEl("cap")}Lectures <span class="muted">${lecP.completed}/${lecP.total}</span></p>
-          <div class="lecture-count-row">
-            <label class="muted">Lectures in batch
-              <input type="number" min="0" max="60" value="${lecP.total}" data-action="set-lecture-count" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" />
-            </label>
+      </button>
+      <div class="chapter-body-track">
+        <div class="chapter-body">
+          <div class="chapter-progress-ring">
+            ${arcSvg(pct, 52, 6)}
+            <div class="chapter-progress-stats">
+              <span><b>${pct}%</b> overall</span>
+              ${nextRevision ? `<span>Next revision <b>${formatDateShort(nextRevision.date)}</b></span>` : ""}
+            </div>
           </div>
-          ${lecP.total ? `<div class="lecture-grid">
-            ${chapter.lectures.map((l, i) => `
-              <button class="lecture-pill ${l.completed ? "done" : ""}" data-action="toggle-lecture" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">
-                ${l.completed ? Icon.check : ""} L${i + 1}
-              </button>`).join("")}
-          </div>` : `<p class="muted">Set the lecture count above once your batch tells you how many lectures this chapter has.</p>`}
-        </div>
 
-        <div class="chapter-section">
-          <p class="chapter-section-title">${iconEl("layers")}DPP <span class="muted">${dppP.completed}/${dppP.total}</span></p>
-          ${chapter.dpps && chapter.dpps.length ? `<div class="dpp-list">
-            ${chapter.dpps.map((d, i) => `
-              <div class="dpp-row">
-                <button class="check-circle ${d.status === "completed" ? "checked" : ""}" data-action="toggle-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${d.status === "completed" ? Icon.check : ""}</button>
-                <span class="dpp-label">DPP ${i + 1}</span>
-                <input type="number" class="dpp-score" placeholder="Score" value="${d.score ?? ""}" data-action="set-dpp-score" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}" />
-                <button class="icon-btn xs" data-action="delete-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${Icon.trash}</button>
-              </div>`).join("")}
-          </div>` : `<p class="muted">No DPPs added yet.</p>`}
-          <button class="btn-ghost xs" data-action="add-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">${iconEl("plus")}Add DPP</button>
-        </div>
-
-        <div class="chapter-section">
-          <p class="chapter-section-title">${iconEl("book")}Theory &amp; Practice</p>
-          <div class="check-grid">
-            ${CHAPTER_CHECK_FIELDS.map(
-              ([field, label]) => `<label class="check-pill">
-                <input type="checkbox" data-action="toggle-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="${field}" ${chapter[field] ? "checked" : ""} />
-                <span>${label}</span>
-              </label>`
+          <div class="status-toggle" role="group">
+            ${["not-started", "in-progress", "completed"].map(
+              (st) => `<button class="status-btn ${chapter.status === st ? "active" : ""}" data-action="set-chapter-status" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-status="${st}">${{ "not-started": "Not Started", "in-progress": "In Progress", completed: "Completed" }[st]}</button>`
             ).join("")}
           </div>
-          <div class="field-row">
-            <label>Confidence
-              <input type="range" min="1" max="5" value="${chapter.confidence}" data-action="set-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="confidence" data-numeric="1" />
-            </label>
-            <label>Difficulty
-              <select data-action="set-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="difficulty">
-                ${["Easy", "Medium", "Hard"].map((d) => `<option ${chapter.difficulty === d ? "selected" : ""}>${d}</option>`).join("")}
-              </select>
-            </label>
+
+          <div class="chapter-section">
+            <p class="chapter-section-title">${iconEl("cap")}Lectures <span class="muted">${lecP.completed}/${lecP.total}</span></p>
+            <div class="lecture-count-row">
+              <label class="muted">Lectures in batch
+                <input type="number" min="0" max="60" value="${lecP.total}" data-action="set-lecture-count" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" />
+              </label>
+            </div>
+            ${lecP.total ? `<div class="lecture-grid">
+              ${chapter.lectures.map((l, i) => `
+                <button class="lecture-pill ${l.completed ? "done" : ""}" data-action="toggle-lecture" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">
+                  ${l.completed ? Icon.check : ""} L${i + 1}
+                </button>`).join("")}
+            </div>` : `<p class="muted">Set the lecture count above once your batch tells you how many lectures this chapter has.</p>`}
           </div>
+
+          <div class="chapter-section">
+            <p class="chapter-section-title">${iconEl("layers")}DPP <span class="muted">${dppP.completed}/${dppP.total}</span></p>
+            ${chapter.dpps && chapter.dpps.length ? `<div class="dpp-list">
+              ${chapter.dpps.map((d, i) => `
+                <div class="dpp-row">
+                  <button class="check-circle ${d.status === "completed" ? "checked" : ""}" data-action="toggle-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${d.status === "completed" ? Icon.check : ""}</button>
+                  <span class="dpp-label">DPP ${i + 1}</span>
+                  <input type="number" class="dpp-score" placeholder="Score" value="${d.score ?? ""}" data-action="set-dpp-score" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}" />
+                  <button class="icon-btn xs" data-action="delete-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${Icon.trash}</button>
+                </div>`).join("")}
+            </div>` : `<p class="muted">No DPPs added yet.</p>`}
+            <button class="btn-ghost xs" data-action="add-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">${iconEl("plus")}Add DPP</button>
+          </div>
+
+          <div class="chapter-section">
+            <p class="chapter-section-title">${iconEl("book")}Theory &amp; Practice</p>
+            <div class="check-grid">
+              ${CHAPTER_CHECK_FIELDS.map(
+                ([field, label]) => `<label class="check-pill ${chapter[field] ? "picked" : ""}">
+                  <input type="checkbox" data-action="toggle-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="${field}" ${chapter[field] ? "checked" : ""} />
+                  <span>${label}</span>
+                </label>`
+              ).join("")}
+            </div>
+          </div>
+
+          <div class="chapter-section">
+            <p class="chapter-section-title">${iconEl("sparkle")}Confidence &amp; Difficulty</p>
+            <div class="confidence-row">
+              ${[1, 2, 3, 4, 5].map(
+                (n) => `<button class="confidence-dot ${n <= chapter.confidence ? "filled" : ""}" data-action="set-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="confidence" data-numeric="1" data-value="${n}" aria-label="Confidence ${n}"></button>`
+              ).join("")}
+            </div>
+            <div class="difficulty-row" style="margin-top:10px;">
+              ${["Easy", "Medium", "Hard"].map(
+                (d) => `<button class="difficulty-btn ${chapter.difficulty === d ? "active" : ""}" data-action="set-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="difficulty" data-value="${d}">${d}</button>`
+              ).join("")}
+            </div>
+          </div>
+
           <label class="field-block">Mistakes / things to revisit
             <textarea data-action="set-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="mistakes" rows="2" placeholder="e.g. sign errors in factorisation">${escapeHtml(chapter.mistakes)}</textarea>
           </label>
-        </div>
 
-        <div class="chapter-footer">
-          <span class="muted">${chapter.studyMinutes || 0} min studied</span>
-          <button class="btn-ghost sm" data-action="log-time" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">${iconEl("clock")}Log 25 min</button>
-        </div>
+          <div class="chapter-footer">
+            <span class="muted">${chapter.studyMinutes || 0} min studied</span>
+            <button class="btn-ghost sm" data-action="log-time" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">${iconEl("clock")}Log 25 min</button>
+          </div>
 
-        ${chapter.status === "completed" ? renderRevisionMini(subject, chapterMeta, chapter, nextRevision) : ""}
+          ${chapter.status === "completed" ? renderRevisionMini(subject, chapterMeta, chapter, nextRevision) : ""}
+        </div>
       </div>
-    </details>
+    </div>
   `;
 }
 
@@ -614,14 +655,15 @@ function renderRevision() {
   const due = App.selectors.revisionsDueToday();
   const upcoming = App.selectors.upcomingRevisions(21);
   return `
-    <section class="card glass">
+    <h2 style="margin-bottom:14px;">Revision</h2>
+    <div class="card">
       ${sectionHeader("Due Today", due.length ? `<span class="count-badge">${due.length}</span>` : "")}
       ${due.length ? renderRevisionRows(due) : emptyState("check", "Nothing due", "You're fully caught up on revisions today.")}
-    </section>
-    <section class="card glass">
+    </div>
+    <div class="card">
       ${sectionHeader("Upcoming (next 21 days)")}
       ${upcoming.length ? renderRevisionRows(upcoming) : emptyState("revision", "Nothing scheduled", "Complete chapters to build your revision queue.")}
-    </section>
+    </div>
   `;
 }
 function renderRevisionRows(list) {
@@ -640,13 +682,13 @@ function renderRevisionRows(list) {
 function renderWeeklyTargets() {
   const targets = App.getState().weeklyTargets;
   return `
-    <div class="list-header"><button class="btn-primary sm" data-action="open-add-target">${iconEl("plus")}New Target</button></div>
+    <div class="list-header"><h2>Weekly Target</h2><button class="btn-primary sm" data-action="open-add-target">${iconEl("plus")}New Target</button></div>
     ${targets.length ? `<div class="target-grid">${targets.map(renderTargetCard).join("")}</div>` : emptyState("target", "No weekly targets yet", "Set a target like \u201cComplete 5 chapters\u201d to stay on track.")}
   `;
 }
 function renderTargetCard(t) {
   const pct = t.goal ? Math.min(100, Math.round((t.current / t.goal) * 100)) : 0;
-  return `<div class="card glass target-card">
+  return `<div class="card target-card">
     <div class="target-card-top"><h4>${escapeHtml(t.label)}</h4><button class="icon-btn xs" data-action="delete-target" data-id="${t.id}">${Icon.trash}</button></div>
     ${progressBar(pct)}
     <div class="target-card-foot"><span>${t.current} / ${t.goal}</span><span class="muted">by ${formatDateShort(t.deadline)}</span></div>
@@ -697,7 +739,7 @@ function renderHomeworkRow(h) {
 function renderExams() {
   const exams = App.selectors.upcomingExams();
   return `
-    <div class="list-header"><button class="btn-primary sm" data-action="open-add-exam">${iconEl("plus")}Add Exam</button></div>
+    <div class="list-header"><h2>Upcoming Exams</h2><button class="btn-primary sm" data-action="open-add-exam">${iconEl("plus")}Add Exam</button></div>
     ${exams.length ? `<ul class="task-rows">${exams.map(renderExamRow).join("")}</ul>` : emptyState("exams", "No exams added", "Add your upcoming exams to track the countdown.")}
   `;
 }
@@ -735,7 +777,7 @@ function renderNotes() {
 }
 function renderNoteCard(n) {
   const subj = SUBJECTS.find((s) => s.id === n.subject);
-  return `<div class="note-card glass ${n.pinned ? "pinned" : ""}">
+  return `<div class="note-card ${n.pinned ? "pinned" : ""}">
     <div class="note-card-top"><span class="chip chip-status">${escapeHtml(subj?.name || "General")}</span><button class="icon-btn xs ${n.pinned ? "active" : ""}" data-action="toggle-pin-note" data-id="${n.id}">${Icon.pin}</button></div>
     <h4>${escapeHtml(n.title)}</h4>
     <p class="note-body">${escapeHtml(n.body)}</p>
@@ -748,29 +790,27 @@ function renderNoteCard(n) {
 // ---------------------------------------------------------------------
 function renderResources() {
   return `
-    <section class="card glass">
+    <h2 style="margin-bottom:14px;">Resources</h2>
+    <div class="card">
       ${sectionHeader("Official CISCE Resources")}
       <div class="resource-rows">
         ${Object.values(RESOURCES).map((r) => `
           <a class="resource-row" href="${r.url}" target="_blank" rel="noopener noreferrer">
-            <div>
-              <p class="resource-title">${escapeHtml(r.label)} <span class="chip chip-info">Official</span></p>
-              <p class="muted">${escapeHtml(r.note)}</p>
-            </div>
+            <div><p class="resource-title">${escapeHtml(r.label)} <span class="chip chip-info">Official</span></p><p class="muted">${escapeHtml(r.note)}</p></div>
             ${iconEl("external")}
           </a>`).join("")}
       </div>
-    </section>
-    <section class="card glass">
+    </div>
+    <div class="card">
       ${sectionHeader("AI Paper Generator")}
       ${AI_PAPER_GENERATOR_URL
         ? `<p class="muted">Opens your configured AI-based paper generator in a new tab.</p>
            <a class="btn-primary sm" href="${AI_PAPER_GENERATOR_URL}" target="_blank" rel="noopener noreferrer">${iconEl("sparkle")}Open AI Paper Generator</a>`
         : `<div class="empty-state">${iconEl("sparkle", "empty-icon")}
              <p class="empty-title">Not configured yet</p>
-             <p class="empty-subtitle">Set AI_PAPER_GENERATOR_URL in js/data.js to your Gemini-based generator link. No API key needed here — it's just a link-out.</p>
+             <p class="empty-subtitle">Set AI_PAPER_GENERATOR_URL in js/data.js. No API key needed here — it's a link-out only.</p>
            </div>`}
-    </section>
+    </div>
   `;
 }
 
@@ -780,7 +820,8 @@ function renderResources() {
 function renderSettings() {
   const { profile, settings } = App.getState();
   return `
-    <section class="card glass settings-card">
+    <h2 style="margin-bottom:14px;">Settings</h2>
+    <div class="card settings-card">
       ${sectionHeader("Profile")}
       <label class="field-block">Your name<input type="text" value="${escapeHtml(profile.studentName)}" data-action="profile-field" data-field="studentName" /></label>
       <div class="field-row">
@@ -795,17 +836,17 @@ function renderSettings() {
       <label class="field-block">Daily study time available (minutes)<input type="number" min="30" step="15" value="${profile.dailyStudyMinutes}" data-action="profile-field" data-field="dailyStudyMinutes" /></label>
       <label class="field-block">Batch schedule notes<textarea rows="3" data-action="profile-field" data-field="batchScheduleNote">${escapeHtml(profile.batchScheduleNote)}</textarea></label>
       <button class="btn-ghost sm" data-action="reopen-onboarding">${iconEl("edit")}Redo setup wizard</button>
-    </section>
+    </div>
 
-    <section class="card glass settings-card">
+    <div class="card settings-card">
       ${sectionHeader("About")}
       <div class="about-row">
         <img src="assets/logo.svg" class="about-logo" alt="VEDAMITRA" />
-        <div><p class="brand-name">VEDAMITRA</p><p class="muted">Your Personal AI Study Companion — built for ICSE 2027.</p></div>
+        <div><p style="font-weight:800;">VEDAMITRA</p><p class="muted">Your Personal AI Study Companion — built for ICSE 2027.</p></div>
       </div>
-    </section>
+    </div>
 
-    <section class="card glass settings-card">
+    <div class="card settings-card">
       ${sectionHeader("Data")}
       <p class="muted">Everything is stored privately in this browser. Export a backup regularly.</p>
       <div class="settings-actions">
@@ -813,6 +854,6 @@ function renderSettings() {
         <label class="btn-ghost sm file-btn">${iconEl("plus")}Import backup<input type="file" accept="application/json" data-action="import-data" hidden /></label>
         <button class="btn-danger sm" data-action="reset-data">${iconEl("trash")}Reset all data</button>
       </div>
-    </section>
+    </div>
   `;
 }

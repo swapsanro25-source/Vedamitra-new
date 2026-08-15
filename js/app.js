@@ -1,27 +1,12 @@
 /**
- * VEDAMITRA 2.0 — App bootstrap & interactivity
- * --------------------------------------------
- * One delegated listener per event type reads `data-action` off the
- * clicked/changed element and dispatches to a handler below.
- */
-
-/**
- * VEDAMITRA 2.0 — App bootstrap & interactivity
+ * VEDAMITRA 3.0 — App bootstrap & interactivity
  * --------------------------------------------
  * One delegated listener per event type reads `data-action` off the
  * clicked/changed element and dispatches to a handler below.
  *
- * WHY CHAPTERS USED TO COLLAPSE (fixed below):
- * Every state change causes a full innerHTML rebuild of #app-root (there's
- * no virtual DOM / diffing here — see render.js). A freshly-built <details>
- * element always starts closed, so editing anything inside an open chapter
- * (a checkbox, the confidence slider, lecture count, a DPP score) rebuilt
- * the page and the chapter you were editing snapped shut — which reads as
- * "got sent back to the main page" even though you never left the subject
- * view. The fix has two parts: (1) `_openChapters` below remembers which
- * chapter <details> are open across rebuilds, independent of localStorage,
- * and render.js re-applies `open` to the right ones; (2) scroll position is
- * saved/restored around every rebuild that isn't an explicit navigation.
+ * See the comment at the top of render.js for why chapter expand/collapse
+ * ("toggle-chapter" below) is handled as a pure DOM operation rather than
+ * going through App.actions / App.setView like everything else.
  */
 
 function renderApp() {
@@ -32,27 +17,19 @@ function renderApp() {
   App._justNavigated = false;
 }
 
-// Remembers which chapter <details> are expanded across re-renders. Never
-// written to localStorage — purely a same-session UI convenience.
-document.addEventListener(
-  "toggle",
-  (e) => {
-    const el = e.target;
-    if (!el.classList || !el.classList.contains("chapter-card")) return;
-    const state = App.getState();
-    state._openChapters = state._openChapters || {};
-    state._openChapters[el.dataset.subject + ":" + el.dataset.chapter] = el.open;
-  },
-  true // 'toggle' does not bubble in all browsers — must listen on capture
-);
-
 function closeModal() {
   document.getElementById("modal-layer").innerHTML = "";
 }
 function openModal(html) {
   document.getElementById("modal-layer").innerHTML = `
     <div class="modal-backdrop" data-action="close-modal">
-      <div class="modal glass" data-stop>${html}</div>
+      <div class="modal" data-stop>${html}</div>
+    </div>`;
+}
+function openSheet(html) {
+  document.getElementById("modal-layer").innerHTML = `
+    <div class="sheet-backdrop" data-action="close-modal">
+      <div class="sheet" data-stop>${html}</div>
     </div>`;
 }
 
@@ -176,6 +153,17 @@ document.addEventListener("click", (e) => {
   const state = App.getState();
 
   switch (action) {
+    // Chapter expand/collapse: pure DOM, deliberately bypasses the render
+    // pipeline entirely (see render.js header comment).
+    case "toggle-chapter": {
+      const card = el.closest(".chapter-card");
+      const isOpen = card.classList.toggle("expanded");
+      const key = card.dataset.subject + ":" + card.dataset.chapter;
+      state._openChapters = state._openChapters || {};
+      state._openChapters[key] = isOpen;
+      return; // no render, no scroll handling
+    }
+
     case "navigate":
       App._justNavigated = true;
       App.setView(el.dataset.view);
@@ -183,10 +171,9 @@ document.addEventListener("click", (e) => {
       window.scrollTo({ top: 0, behavior: "smooth" });
       break;
     case "open-more":
-      openModal(renderMoreSheet(App.getView()));
+      openSheet(renderMoreSheet(App.getView()));
       break;
 
-    // ---- Onboarding ----
     case "ob-next": obGoStep(1); break;
     case "ob-back": obGoStep(-1); break;
     case "ob-add-exam": {
@@ -199,8 +186,6 @@ document.addEventListener("click", (e) => {
       App.setView(App.getView());
       break;
     }
-    case "ob-remove-exam":
-      break; // handled via change delegation below (data-ob-remove-exam is on click too, see fallthrough)
     case "ob-finish": {
       const draft = state._onboardingDraft;
       const { exams, ...profile } = draft;
@@ -236,6 +221,16 @@ document.addEventListener("click", (e) => {
     case "delete-dpp":
       App.actions.deleteDpp(el.dataset.subject, el.dataset.chapter, Number(el.dataset.index));
       break;
+
+    // Confidence dots and Difficulty buttons both route through the same
+    // generic field-setter as every other chapter field.
+    case "set-chapter-field": {
+      if (el.dataset.value !== undefined) {
+        const value = el.dataset.numeric ? Number(el.dataset.value) : el.dataset.value;
+        App.actions.setChapterField(el.dataset.subject, el.dataset.chapter, el.dataset.field, value);
+      }
+      break;
+    }
 
     case "generate-plan": {
       const fresh = Planner.generateTodayPlan(state);
@@ -315,7 +310,6 @@ document.addEventListener("click", (e) => {
       break;
   }
 
-  // data-ob-remove-exam is easiest handled here since it's plain click, no data-action.
   const removeBtn = e.target.closest("[data-ob-remove-exam]");
   if (removeBtn) {
     const idx = Number(removeBtn.dataset.obRemoveExam);
@@ -331,7 +325,6 @@ document.addEventListener("change", (e) => {
   const el = e.target;
   const state = App.getState();
 
-  // Onboarding field bindings (no data-action, just data-ob-*)
   if (el.dataset.obField) {
     const field = el.dataset.obField;
     const value = field === "dailyStudyMinutes" ? Number(el.value) : el.value;
@@ -361,11 +354,6 @@ document.addEventListener("change", (e) => {
     case "toggle-chapter-field":
       App.actions.setChapterField(actionEl.dataset.subject, actionEl.dataset.chapter, actionEl.dataset.field, actionEl.checked);
       break;
-    case "set-chapter-field": {
-      const value = actionEl.dataset.numeric ? Number(actionEl.value) : actionEl.value;
-      App.actions.setChapterField(actionEl.dataset.subject, actionEl.dataset.chapter, actionEl.dataset.field, value);
-      break;
-    }
     case "set-lecture-count":
       App.actions.setLectureCount(actionEl.dataset.subject, actionEl.dataset.chapter, actionEl.value);
       break;
@@ -448,30 +436,43 @@ document.addEventListener("submit", (e) => {
   }
 });
 
-// Click outside modal content closes it.
+// Click outside modal/sheet content closes it.
 document.addEventListener("click", (e) => {
-  if (e.target.classList.contains("modal-backdrop")) closeModal();
+  if (e.target.classList.contains("modal-backdrop") || e.target.classList.contains("sheet-backdrop")) closeModal();
 });
 
 // ---------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------
 function boot() {
-  App.subscribe(renderApp);
-  renderApp();
+  try {
+    App.subscribe(renderApp);
+    renderApp();
+  } catch (err) {
+    // Defensive: if boot fails for any reason, never leave the splash
+    // screen stuck forever — surface a minimal recovery message instead.
+    console.error("VEDAMITRA failed to initialize:", err);
+    const root = document.getElementById("app-root");
+    if (root) {
+      root.innerHTML = `<div style="padding:40px;text-align:center;font-family:sans-serif;">
+        <p style="font-weight:700;margin-bottom:8px;">VEDAMITRA couldn't start.</p>
+        <p style="color:#6b6885;font-size:0.9rem;">Try refreshing the page. If this keeps happening, use Settings → Reset all data once you're back in.</p>
+      </div>`;
+    }
+  }
 
   const splash = document.getElementById("splash");
   const state = App.getState();
   const boardDate = state.settings.boardExamDate ? formatDateLong(state.settings.boardExamDate) : "";
-  document.getElementById("splash-status").textContent = boardDate ? `ICSE 2027 · Boards on ${boardDate}` : "ICSE 2027 preparation";
+  const statusEl = document.getElementById("splash-status");
+  if (statusEl) statusEl.textContent = boardDate ? `ICSE 2027 · Boards on ${boardDate}` : "ICSE 2027 preparation";
 
+  // Splash always proceeds — never gated on anything that could hang.
   window.setTimeout(() => {
     splash.classList.add("splash-hide");
     window.setTimeout(() => splash.remove(), 700);
-  }, 1400);
+  }, 1300);
 
-  // PWA: safe, best-effort registration — never blocks the app if it fails
-  // (unsupported browser, disallowed scope, offline-only preview, etc.).
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("sw.js").catch(() => {});
