@@ -62,18 +62,18 @@ const CHAPTER_CHECK_FIELDS = [
 ];
 
 const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+  { id: "dashboard", label: "Schedule", icon: "dashboard" },
   { id: "subjects", label: "Subjects", icon: "subjects" },
-  { id: "batch", label: "Batch", icon: "cap" },
-  { id: "homework", label: "Homework", icon: "homework" },
+  { id: "batch", label: "Classes", icon: "cap" },
   { id: "revision", label: "Revision", icon: "revision" },
   { id: "weekly-target", label: "Weekly Target", icon: "target" },
-  { id: "exams", label: "Exams", icon: "exams" },
+  { id: "homework", label: "Homework", icon: "homework" },
+  { id: "exams", label: "Tests", icon: "exams" },
   { id: "notes", label: "Notes", icon: "notes" },
   { id: "resources", label: "Resources", icon: "compass" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
-const DOCK_ITEMS = ["dashboard", "subjects", "batch", "homework"];
+const TAB_ITEMS = ["dashboard", "subjects", "batch", "revision"];
 
 // ---------------------------------------------------------------------
 // Shell
@@ -83,37 +83,39 @@ function renderShell() {
   if (!state.onboarded) return renderOnboarding();
 
   const view = App.getView();
+  const initials = (state.profile.studentName || "S").trim().slice(0, 1).toUpperCase();
+  const isSubjectDetail = view.startsWith("subject:");
+
   return `
     <div class="app-shell">
-      <header class="top-strip">
-        <div class="brand-mini"><img src="assets/logo.svg" alt="VEDAMITRA" /><span>VEDAMITRA</span></div>
-        <div class="top-strip-actions">
-          <button class="icon-btn" data-action="navigate" data-view="settings" aria-label="Settings">${Icon.settings}</button>
-        </div>
+      <header class="top-bar">
+        <div class="top-bar-avatar">${initials}</div>
+        <div class="top-bar-greeting">${isSubjectDetail ? "VEDAMITRA" : (NAV_ITEMS.find((n) => n.id === view)?.label === "Schedule" ? `Hi, ${escapeHtml(state.profile.studentName || "Student")}` : NAV_ITEMS.find((n) => n.id === view)?.label || "VEDAMITRA")}</div>
+        <button class="top-bar-icon-btn" data-action="navigate" data-view="settings" aria-label="Settings">${Icon.settings}</button>
       </header>
       <main class="main">
         <div class="view-root" id="view-root">${renderView(view)}</div>
       </main>
-      ${renderDock(view)}
+      ${renderTabBar(view)}
       <div class="modal-layer" id="modal-layer"></div>
     </div>
   `;
 }
 
-function renderDock(view) {
-  return `<nav class="dock">
-    ${DOCK_ITEMS.map((id) => {
+function renderTabBar(view) {
+  return `<nav class="tab-bar">
+    ${TAB_ITEMS.map((id) => {
       const item = NAV_ITEMS.find((n) => n.id === id);
-      return `<button class="dock-item ${view === id ? "active" : ""}" data-action="navigate" data-view="${id}">
+      return `<button class="tab-bar-item ${view === id ? "active" : ""}" data-action="navigate" data-view="${id}">
         ${iconEl(item.icon)}<span>${item.label}</span>
       </button>`;
     }).join("")}
-    <button class="dock-item ${!DOCK_ITEMS.includes(view) ? "active" : ""}" data-action="open-more">${iconEl("menu")}<span>More</span></button>
+    <button class="tab-bar-item ${!TAB_ITEMS.includes(view) ? "active" : ""}" data-action="open-more">${iconEl("menu")}<span>More</span></button>
   </nav>`;
 }
 
 function renderMoreSheet(view) {
-  const rest = NAV_ITEMS.filter((n) => !DOCK_ITEMS.includes(n.id));
+  const rest = NAV_ITEMS.filter((n) => !TAB_ITEMS.includes(n.id));
   return `
     <div class="sheet-grabber"></div>
     <h3>More</h3>
@@ -272,170 +274,95 @@ function obNav(step) {
 // Dashboard — hero + dominant focus card + compact plan strip, then a
 // two-column composition (progress/upcoming) on wide screens.
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+// Dashboard — "Your Learning Hub"
+// ---------------------------------------------------------------------
+function weekRangeLabel() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const week = Math.ceil(((now - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
+  const fmt = (d) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  return `Week ${week}: ${monday.getDate()}-${fmt(sunday)}`;
+}
+
+const TASK_CAT_ICONS = { Revision: "revision", DPP: "layers", Homework: "homework", Lecture: "cap", Theory: "book" };
+
 function renderDashboard() {
   const state = App.getState();
   const s = App.selectors;
   const overall = s.overallProgress();
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const name = state.profile.studentName || "there";
+  const name = state.profile.studentName || "Student";
   const plan = state.todayPlan.date === App.todayISO() ? state.todayPlan.tasks : null;
-  const batchToday = s.todaysBatchClasses();
-  const hwToday = s.todaysHomework();
-  const dueRevisions = s.revisionsDueToday();
   const nextExam = s.upcomingExams(1)[0];
-  const nextBatch = batchToday.find((c) => !c.completed) || s.upcomingBatchClasses(1)[0];
-  const firstOpenTask = plan && plan.find((t) => !t.done);
+  const dueRevisions = s.revisionsDueToday();
 
   return `
-    <div class="hero">
-      <p class="hero-eyebrow">${greeting}</p>
-      <h1 class="hero-name">${escapeHtml(name)}</h1>
-      ${nextExam
-        ? `<span class="hero-exam-pill"><span class="num">${s.daysUntil(nextExam.date)}</span>days to ${escapeHtml(nextExam.name)}</span>`
-        : `<span class="hero-exam-pill">Add your board exam date in Settings</span>`}
-    </div>
-
-    <div class="dash-two-col">
-      <div class="dash-two-col-left">
-        ${renderFocusCard(firstOpenTask, plan)}
-        <div class="card">
-          ${sectionHeader("Today's Batch Classes", `<button class="btn-ghost sm" data-action="navigate" data-view="batch">${iconEl("plus")}Manage</button>`)}
-          ${batchToday.length ? renderBatchRows(batchToday) : emptyState("cap", "No classes today", "Add today's batch schedule from Batch Classes.")}
-        </div>
-        <div class="card">
-          ${sectionHeader("Pending Homework", hwToday.length ? `<span class="count-badge">${hwToday.length}</span>` : "")}
-          ${hwToday.length
-            ? `<ul class="mini-list">${hwToday.map((h) => `
-                <li><span class="dot" style="background:var(--accent)"></span>
-                  <span class="mini-list-text">${escapeHtml(h.subject)} — ${escapeHtml(h.description)}</span>
-                  <button class="icon-btn xs" data-action="complete-homework" data-id="${h.id}">${Icon.check}</button></li>`).join("")}</ul>`
-            : emptyState("homework", "Nothing due today", "")}
-        </div>
-      </div>
-
-      <div class="dash-two-col-right">
-        <div class="stat-row">
-          <div class="stat-card">
-            <div class="arc-wrap">
-              ${arcSvg(overall.pct, 84, 8)}
-              <div><div class="arc-num">${overall.pct}%</div><div class="arc-label">Overall progress</div></div>
-            </div>
-          </div>
-          <div class="stat-card">
-            ${renderWeeklyTargetSummary(state.weeklyTargets)}
-          </div>
-        </div>
-
-        <div class="card">
-          ${sectionHeader("Revision Due", dueRevisions.length ? `<span class="count-badge">${dueRevisions.length}</span>` : "")}
-          ${dueRevisions.length
-            ? `<ul class="mini-list">${dueRevisions.slice(0, 4).map((r) => `
-                <li><span class="dot" style="background:${r.color}"></span>
-                  <span class="mini-list-text">${escapeHtml(r.subjectName)} · ${escapeHtml(r.chapterName)}</span>
-                  <button class="icon-btn xs" data-action="complete-revision" data-subject="${r.subjectId}" data-chapter="${r.chapterId}" data-index="${r.index}">${Icon.check}</button></li>`).join("")}</ul>`
-            : emptyState("check", "All caught up", "")}
-        </div>
-
-        <div class="card">
-          ${sectionHeader("Upcoming")}
-          <div class="upcoming-grid">
-            <div class="upcoming-tile">
-              <div class="upcoming-tile-icon violet">${iconEl("cap")}</div>
-              <p class="upcoming-tile-title">Next Class</p>
-              <p class="upcoming-tile-sub">${nextBatch ? `${escapeHtml(nextBatch.subject)} · ${formatDateShort(nextBatch.date)}` : "None scheduled"}</p>
-            </div>
-            <div class="upcoming-tile">
-              <div class="upcoming-tile-icon amber">${iconEl("exams")}</div>
-              <p class="upcoming-tile-title">Next Test</p>
-              <p class="upcoming-tile-sub">${nextExam ? `${escapeHtml(nextExam.name)} · ${s.daysUntil(nextExam.date)}d` : "None added"}</p>
-            </div>
-            <div class="upcoming-tile">
-              <div class="upcoming-tile-icon cyan">${iconEl("revision")}</div>
-              <p class="upcoming-tile-title">Next Revision</p>
-              <p class="upcoming-tile-sub">${dueRevisions[0] ? escapeHtml(dueRevisions[0].chapterName) : "Nothing due"}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div>
+      <p class="hub-eyebrow">Welcome back to VEDAMITRA</p>
+      <h1 class="hub-title">Your Learning Hub</h1>
+      <span class="hub-week-pill">${iconEl("calendar")}${weekRangeLabel()}</span>
     </div>
 
     <div class="card">
-      ${sectionHeader("Quick Actions")}
-      <div class="nav-cards">
-        ${[
-          ["subjects", "Subjects", "subjects"],
-          ["revision", "Revision", "revision"],
-          ["weekly-target", "Targets", "target"],
-          ["exams", "Tests", "exams"],
-          ["notes", "Notes", "notes"],
-          ["resources", "Resources", "compass"],
-        ].map(([view, label, icon]) => `
-          <button class="nav-card" data-action="navigate" data-view="${view}">
-            <span class="nav-card-icon">${iconEl(icon)}</span>${label}
-          </button>`).join("")}
+      ${sectionHeader("Today's Scheduled Work", plan && plan.length ? `<span class="pill-badge">${plan.length} Tasks</span>` : "")}
+      ${plan && plan.length ? renderTaskList(plan) : `<div class="empty-state">${iconEl("sparkle", "empty-icon")}<p class="empty-title">No plan generated yet</p><p class="empty-subtitle">Build today's plan from batch classes, revisions, homework and weak chapters.</p><button class="btn-primary sm" data-action="generate-plan">${iconEl("sparkle")}Generate Today's Plan</button></div>`}
+      ${plan && plan.length ? `<div style="margin-top:12px; text-align:right;"><button class="btn-ghost xs" data-action="generate-plan">${iconEl("sparkle")}Regenerate</button></div>` : ""}
+    </div>
+
+    <div class="boards-card">
+      <p class="boards-eyebrow">${iconEl("exams")}ICSE 2027 Boards</p>
+      <div class="boards-days-row">
+        <div><div class="boards-days">${nextExam ? s.daysUntil(nextExam.date) : (state.settings.boardExamDate ? s.daysUntil(state.settings.boardExamDate) : "—")}</div><div class="boards-days-label">Days Remaining</div></div>
       </div>
+      <div class="boards-progress-row"><span>Class 10 Syllabus Progress</span><span>${overall.pct}%</span></div>
+      <div class="progress-track on-navy"><div class="progress-fill" style="width:${overall.pct}%"></div></div>
+    </div>
+
+    <h3 class="qa-heading">Quick Access</h3>
+    <div class="nav-cards">
+      <button class="nav-card nc-lavender" data-action="navigate" data-view="weekly-target">Weekly Schedule<span class="nav-card-icon">${iconEl("target")}</span></button>
+      <button class="nav-card nc-amber" data-action="navigate" data-view="subjects">Subjects<span class="nav-card-icon">${iconEl("subjects")}</span></button>
+      <button class="nav-card nc-navy" data-action="navigate" data-view="revision">Revision${dueRevisions.length ? `<span class="chip chip-high" style="align-self:flex-start;">${dueRevisions.length} Due</span>` : ""}<span class="nav-card-icon">${iconEl("revision")}</span></button>
+      <button class="nav-card nc-emerald" data-action="navigate" data-view="homework">Homework<span class="nav-card-icon">${iconEl("homework")}</span></button>
+      <button class="nav-card nc-crimson" data-action="navigate" data-view="exams">Tests<span class="nav-card-icon">${iconEl("exams")}</span></button>
+      <button class="nav-card nc-blue" data-action="navigate" data-view="resources">Resources<span class="nav-card-icon">${iconEl("compass")}</span></button>
     </div>
   `;
 }
 
-function renderFocusCard(task, plan) {
-  if (!plan) {
-    return `<div class="focus-card focus-empty">
-      <p class="focus-eyebrow">Today's Focus</p>
-      <p class="focus-title">No plan generated yet</p>
-      <p class="focus-sub">VEDAMITRA can build today's plan from batch classes, revisions, homework and weak chapters.</p>
-      <button class="btn-primary" data-action="generate-plan">${iconEl("sparkle")}Generate Today's Plan</button>
-    </div>`;
-  }
-  if (!task) {
-    return `<div class="focus-card focus-empty">
-      <p class="focus-eyebrow">Today's Focus</p>
-      <p class="focus-title">Every task is complete</p>
-      <p class="focus-sub">Nice work — you've finished everything in today's plan.</p>
-      <button class="btn-primary" data-action="generate-plan">${iconEl("sparkle")}Regenerate</button>
-    </div>${renderPlanStrip(plan)}`;
-  }
-  const idx = plan.indexOf(task);
-  return `<div class="focus-card">
-    <p class="focus-eyebrow">Today's Focus</p>
-    <p class="focus-title">${escapeHtml(task.subject)} — ${escapeHtml(task.chapter)}</p>
-    <p class="focus-sub">${escapeHtml(task.task)}</p>
-    <div class="focus-meta">
-      <span class="focus-meta-item">${iconEl("clock")}${task.duration} min</span>
-      <span class="focus-meta-item">${iconEl("sparkle")}${escapeHtml(task.type || "")}</span>
-      <span class="focus-meta-item">${escapeHtml(task.priority || "Medium")} priority</span>
-    </div>
-    <button class="btn-primary" data-action="toggle-plan-task" data-index="${idx}">${iconEl("check")}Mark as done</button>
-  </div>${renderPlanStrip(plan)}`;
-}
-
-function renderPlanStrip(plan) {
-  return `<div class="plan-strip">
+function renderTaskList(plan) {
+  return `<div class="task-list">
     ${plan.map((t, i) => `
-      <div class="plan-chip ${t.done ? "done" : ""}">
-        <div class="plan-chip-top">
-          <span class="plan-chip-type">${escapeHtml(t.type || "")}</span>
+      <div class="task-card task-cat-${i % 4} ${t.done ? "done" : ""}">
+        <span class="task-card-icon">${iconEl(TASK_CAT_ICONS[t.type] || "book")}</span>
+        <div class="task-card-body">
+          <p class="task-card-title">${escapeHtml(t.subject)}: ${escapeHtml(t.chapter)}</p>
+          <p class="task-card-cat"><span class="dot" style="background:currentColor;width:5px;height:5px;"></span>${escapeHtml(t.subject)}</p>
+        </div>
+        <div class="task-card-right">
+          <span class="task-card-duration">${t.duration} min</span>
           <button class="check-circle ${t.done ? "checked" : ""}" data-action="toggle-plan-task" data-index="${i}">${t.done ? Icon.check : ""}</button>
         </div>
-        <p class="plan-chip-title">${escapeHtml(t.subject)}</p>
-        <p class="plan-chip-sub">${escapeHtml(t.chapter)}</p>
-        <div class="plan-chip-foot"><span class="muted">${t.duration}m</span></div>
       </div>`).join("")}
   </div>`;
 }
 
 function renderWeeklyTargetSummary(targets) {
-  if (!targets.length) return `<p class="arc-label" style="margin-bottom:8px;">Weekly Target</p>${emptyState("target", "No target set", "Create one from the Weekly Target tab.")}`;
+  if (!targets.length) return emptyState("target", "No target set", "Create one from the Weekly Target tab.");
   const t = targets[0];
   const pct = t.goal ? Math.min(100, Math.round((t.current / t.goal) * 100)) : 0;
   return `
-    <p class="arc-label" style="margin-bottom:6px;">Weekly Target</p>
     <p style="font-weight:700; font-size:0.92rem; margin-bottom:6px;">${escapeHtml(t.label)}</p>
     ${progressBar(pct)}
     <p class="muted">${t.current} / ${t.goal} · due ${formatDateShort(t.deadline)}</p>
   `;
 }
+
 
 // ---------------------------------------------------------------------
 // Batch Classes
@@ -475,23 +402,27 @@ function renderBatchRows(list, withDelete) {
 // ---------------------------------------------------------------------
 // Subjects
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+// Subjects
+// ---------------------------------------------------------------------
 function renderSubjects() {
   const state = App.getState();
-  const active = SUBJECTS.filter((s) => state.profile.subjects.includes(s.id));
+  const query = (state._subjectQuery || "").toLowerCase();
+  const active = SUBJECTS.filter((s) => state.profile.subjects.includes(s.id) && (!query || s.name.toLowerCase().includes(query)));
   return `
     <h2 style="margin-bottom:14px;">Subjects</h2>
+    <div class="search-box">${iconEl("search")}<input type="search" placeholder="Search subjects…" value="${escapeHtml(state._subjectQuery || "")}" data-action="search-subjects" /></div>
     <div class="subject-grid">
-      ${active.map((s) => {
+      ${active.map((s, i) => {
         const p = App.selectors.subjectProgress(s.id);
+        const started = Object.values(App.getState().subjects[s.id].chapters).filter((c) => c.status !== "not-started").length;
         return `
-        <button class="subject-card card" data-action="navigate" data-view="subject:${s.id}" style="--accent:${s.color}">
-          <div class="subject-card-top">
-            <span class="subject-dot" style="background:${s.color}"></span>
-            <span class="muted">${p.completed}/${p.total}</span>
+        <button class="subject-card card ${i % 3 === 0 ? "tint" : ""}" data-action="navigate" data-view="subject:${s.id}">
+          <div>
+            <h3>${escapeHtml(s.name)}</h3>
+            <p class="mono-label">${started}/${p.total} CHAPTERS STARTED</p>
           </div>
-          <h3>${escapeHtml(s.name)}</h3>
-          ${progressBar(p.pct, s.color)}
-          <p class="muted subject-card-foot">${p.pct}% complete</p>
+          <span class="subject-card-arrow">${iconEl("chevronRight")}</span>
         </button>`;
       }).join("")}
     </div>
@@ -506,9 +437,9 @@ function renderSubjectDetail(subjectId) {
 
   return `
     <button class="back-link" data-action="navigate" data-view="subjects">${iconEl("chevronLeft")}All subjects</button>
-    <div class="subject-header" style="--accent:${subject.color}">
-      <div><h2>${escapeHtml(subject.name)}</h2><p class="muted">${p.completed} of ${p.total} chapters completed</p></div>
-      ${arcSvg(p.pct, 68, 7)}
+    <div class="subject-header">
+      <p class="mono-label">${p.completed} of ${p.total} chapters completed</p>
+      <h2>${escapeHtml(subject.name)}</h2>
     </div>
     <div class="chapter-list">
       ${subject.chapters.map((c) => renderChapterCard(subject, c, state.subjects[subjectId].chapters[c.id])).join("")}
@@ -516,8 +447,8 @@ function renderSubjectDetail(subjectId) {
   `;
 }
 
-// Purely a display-time calculation (not part of app state) combining every
-// independent completion signal into one glanceable percentage.
+// Purely a display-time calculation combining every independent completion
+// signal into one glanceable percentage.
 function chapterOverallPct(chapter, lecP, dppP) {
   const flags = CHAPTER_CHECK_FIELDS.map(([f]) => (chapter[f] ? 1 : 0));
   let sum = flags.reduce((a, b) => a + b, 0);
@@ -535,6 +466,7 @@ function renderChapterCard(subject, chapterMeta, chapter) {
   const openKey = subject.id + ":" + chapterMeta.id;
   const isOpen = !!(App.getState()._openChapters || {})[openKey];
   const pct = chapterOverallPct(chapter, lecP, dppP);
+  const nextLectureIdx = (chapter.lectures || []).findIndex((l) => !l.completed);
 
   return `
     <div class="chapter-card status-${chapter.status} ${isOpen ? "expanded" : ""}" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">
@@ -543,19 +475,15 @@ function renderChapterCard(subject, chapterMeta, chapter) {
         <span class="chapter-name">${escapeHtml(chapterMeta.name)}</span>
         <span class="chip-row">
           ${lecP.total ? `<span class="chip chip-status">Lec ${lecP.completed}/${lecP.total}</span>` : ""}
-          ${dppP.total ? `<span class="chip chip-status">DPP ${dppP.completed}/${dppP.total}</span>` : ""}
           <span class="chip chip-status">${statusLabel}</span>
         </span>
         ${iconEl("chevronRight", "summary-caret")}
       </button>
       <div class="chapter-body-track">
         <div class="chapter-body">
-          <div class="chapter-progress-ring">
-            ${arcSvg(pct, 52, 6)}
-            <div class="chapter-progress-stats">
-              <span><b>${pct}%</b> overall</span>
-              ${nextRevision ? `<span>Next revision <b>${formatDateShort(nextRevision.date)}</b></span>` : ""}
-            </div>
+          <div class="chapter-progress-card">
+            <div class="chapter-progress-row"><span class="mono-label">OVERALL COMPLETION</span><span class="chapter-progress-pct">${pct}%</span></div>
+            ${progressBar(pct)}
           </div>
 
           <div class="status-toggle" role="group">
@@ -564,49 +492,50 @@ function renderChapterCard(subject, chapterMeta, chapter) {
             ).join("")}
           </div>
 
-          <div class="chapter-section">
-            <p class="chapter-section-title">${iconEl("cap")}Lectures <span class="muted">${lecP.completed}/${lecP.total}</span></p>
-            <div class="lecture-count-row">
-              <label class="muted">Lectures in batch
-                <input type="number" min="0" max="60" value="${lecP.total}" data-action="set-lecture-count" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" />
-              </label>
-            </div>
-            ${lecP.total ? `<div class="lecture-grid">
+          <div>
+            <div class="subsection-header"><span class="subsection-title">Batch Lectures</span><span class="pill-badge">${lecP.completed}/${lecP.total} Completed</span></div>
+            <div class="lecture-count-row"><span class="muted">Lectures in batch</span><input type="number" min="0" max="60" value="${lecP.total}" data-action="set-lecture-count" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" /></div>
+            ${lecP.total ? `<div class="lecture-list">
               ${chapter.lectures.map((l, i) => `
-                <button class="lecture-pill ${l.completed ? "done" : ""}" data-action="toggle-lecture" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">
-                  ${l.completed ? Icon.check : ""} L${i + 1}
-                </button>`).join("")}
+                <div class="lecture-row ${l.completed ? "done" : ""}">
+                  <button class="lecture-checkbox ${l.completed ? "done" : ""}" data-action="toggle-lecture" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${l.completed ? Icon.check : ""}</button>
+                  <div class="lecture-row-body">
+                    <p class="lecture-row-title">Lecture ${i + 1}: ${escapeHtml(chapterMeta.name)}</p>
+                    <p class="lecture-row-meta">${l.completed ? "Recorded" : i === nextLectureIdx ? "Up Next" : "Scheduled"}</p>
+                  </div>
+                  ${!l.completed && i === nextLectureIdx ? `<span class="lecture-today-pill">Next</span>` : ""}
+                </div>`).join("")}
             </div>` : `<p class="muted">Set the lecture count above once your batch tells you how many lectures this chapter has.</p>`}
           </div>
 
-          <div class="chapter-section">
-            <p class="chapter-section-title">${iconEl("layers")}DPP <span class="muted">${dppP.completed}/${dppP.total}</span></p>
-            ${chapter.dpps && chapter.dpps.length ? `<div class="dpp-list">
+          <div>
+            <div class="subsection-header"><span class="subsection-title">DPPs</span><span class="pill-badge">${dppP.completed}/${dppP.total} Completed</span></div>
+            ${chapter.dpps && chapter.dpps.length ? `<div class="dpp-full-list">
               ${chapter.dpps.map((d, i) => `
-                <div class="dpp-row">
-                  <button class="check-circle ${d.status === "completed" ? "checked" : ""}" data-action="toggle-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${d.status === "completed" ? Icon.check : ""}</button>
-                  <span class="dpp-label">DPP ${i + 1}</span>
-                  <input type="number" class="dpp-score" placeholder="Score" value="${d.score ?? ""}" data-action="set-dpp-score" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}" />
+                <div class="dpp-full-row">
+                  <button class="lecture-checkbox ${d.status === "completed" ? "done" : ""}" data-action="toggle-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${d.status === "completed" ? Icon.check : ""}</button>
+                  <div class="lecture-row-body"><p class="lecture-row-title ${d.status === "completed" ? "" : ""}">DPP ${i + 1}</p></div>
+                  <input type="number" class="dpp-score-input" placeholder="Score" value="${d.score ?? ""}" data-action="set-dpp-score" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}" />
                   <button class="icon-btn xs" data-action="delete-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">${Icon.trash}</button>
                 </div>`).join("")}
             </div>` : `<p class="muted">No DPPs added yet.</p>`}
-            <button class="btn-ghost xs" data-action="add-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">${iconEl("plus")}Add DPP</button>
+            <button class="btn-ghost xs" style="margin-top:8px;" data-action="add-dpp" data-subject="${subject.id}" data-chapter="${chapterMeta.id}">${iconEl("plus")}Add DPP</button>
           </div>
 
-          <div class="chapter-section">
-            <p class="chapter-section-title">${iconEl("book")}Theory &amp; Practice</p>
-            <div class="check-grid">
+          <div>
+            <div class="subsection-header"><span class="subsection-title">Study Work</span></div>
+            <div class="folder-grid">
               ${CHAPTER_CHECK_FIELDS.map(
-                ([field, label]) => `<label class="check-pill ${chapter[field] ? "picked" : ""}">
-                  <input type="checkbox" data-action="toggle-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="${field}" ${chapter[field] ? "checked" : ""} />
-                  <span>${label}</span>
-                </label>`
+                ([field, label]) => `<button class="folder-card ${chapter[field] ? "done" : ""}" data-action="toggle-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="${field}" data-value="${!chapter[field]}">
+                  <div class="folder-card-top"><span class="folder-icon">${iconEl("book")}</span><span class="folder-status-dot"></span></div>
+                  <div><p class="folder-title">${label}</p><p class="folder-caption">${chapter[field] ? "Completed" : "Not Started"}</p></div>
+                </button>`
               ).join("")}
             </div>
           </div>
 
-          <div class="chapter-section">
-            <p class="chapter-section-title">${iconEl("sparkle")}Confidence &amp; Difficulty</p>
+          <div>
+            <div class="subsection-header"><span class="subsection-title">Confidence &amp; Difficulty</span></div>
             <div class="confidence-row">
               ${[1, 2, 3, 4, 5].map(
                 (n) => `<button class="confidence-dot ${n <= chapter.confidence ? "filled" : ""}" data-action="set-chapter-field" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-field="confidence" data-numeric="1" data-value="${n}" aria-label="Confidence ${n}"></button>`
@@ -638,7 +567,7 @@ function renderChapterCard(subject, chapterMeta, chapter) {
 function renderRevisionMini(subject, chapterMeta, chapter, nextRevision) {
   if (!chapter.revisionSchedule?.length) return "";
   return `<div class="revision-mini">
-    <p class="muted">Revision schedule ${nextRevision ? `· next: ${formatDateShort(nextRevision.date)}` : "· all done"}</p>
+    <p class="mono-label">Revision schedule ${nextRevision ? `· next: ${formatDateShort(nextRevision.date)}` : "· all done"}</p>
     <div class="revision-chips">
       ${chapter.revisionSchedule.map((r, i) => `
         <button class="rev-chip ${r.done ? "done" : ""}" data-action="complete-revision" data-subject="${subject.id}" data-chapter="${chapterMeta.id}" data-index="${i}">
@@ -649,22 +578,33 @@ function renderRevisionMini(subject, chapterMeta, chapter, nextRevision) {
 }
 
 // ---------------------------------------------------------------------
-// Revision
+// Revision Center
 // ---------------------------------------------------------------------
 function renderRevision() {
   const due = App.selectors.revisionsDueToday();
   const upcoming = App.selectors.upcomingRevisions(21);
   return `
-    <h2 style="margin-bottom:14px;">Revision</h2>
+    <div class="section-title-flag"><span class="dot-flag"></span><h2 style="font-size:1.1rem;">Due Today</h2><span class="mono-label" style="margin-left:auto;">${due.length} TASKS</span></div>
+    ${due.length ? `<div class="task-list" style="margin-bottom:24px;">${due.map((r) => renderRevisionDueCard(r)).join("")}</div>` : `<div class="card">${emptyState("check", "Nothing due", "You're fully caught up on revisions today.")}</div>`}
+    <h2 style="font-size:1.05rem; margin-bottom:12px;">Upcoming</h2>
     <div class="card">
-      ${sectionHeader("Due Today", due.length ? `<span class="count-badge">${due.length}</span>` : "")}
-      ${due.length ? renderRevisionRows(due) : emptyState("check", "Nothing due", "You're fully caught up on revisions today.")}
-    </div>
-    <div class="card">
-      ${sectionHeader("Upcoming (next 21 days)")}
       ${upcoming.length ? renderRevisionRows(upcoming) : emptyState("revision", "Nothing scheduled", "Complete chapters to build your revision queue.")}
     </div>
   `;
+}
+function renderRevisionDueCard(r) {
+  return `<div class="revision-due-card">
+    <span class="chip chip-info" style="background:var(--lavender-tint); color:var(--lavender-deep);">${escapeHtml(r.subjectName).toUpperCase()}</span>
+    <h3 style="margin-top:8px;">${escapeHtml(r.chapterName)}</h3>
+    <div class="revision-due-meta-row">
+      <div class="revision-due-meta"><span class="mono-label">Cycle</span><strong>${escapeHtml(r.label)}</strong></div>
+      <div class="revision-due-meta"><span class="mono-label">Due</span><strong>${formatDateShort(r.date)}</strong></div>
+    </div>
+    <div class="revision-due-foot">
+      <span class="dot" style="background:${r.color}"></span>
+      <button class="btn-mark-revised" data-action="complete-revision" data-subject="${r.subjectId}" data-chapter="${r.chapterId}" data-index="${r.index}">${iconEl("check")}Mark Revised</button>
+    </div>
+  </div>`;
 }
 function renderRevisionRows(list) {
   return `<ul class="revision-rows">

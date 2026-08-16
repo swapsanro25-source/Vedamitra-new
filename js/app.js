@@ -231,6 +231,12 @@ document.addEventListener("click", (e) => {
       }
       break;
     }
+    // Study Work folder cards are buttons (not checkboxes) — same generic
+    // per-field boolean toggle, just triggered by click.
+    case "toggle-chapter-field": {
+      App.actions.setChapterField(el.dataset.subject, el.dataset.chapter, el.dataset.field, el.dataset.value === "true");
+      break;
+    }
 
     case "generate-plan": {
       const fresh = Planner.generateTodayPlan(state);
@@ -375,6 +381,10 @@ document.addEventListener("change", (e) => {
     case "search-notes":
       state._noteQuery = actionEl.value;
       App.setView("notes");
+      break;
+    case "search-subjects":
+      state._subjectQuery = actionEl.value;
+      App.setView("subjects");
       break;
     case "import-data": {
       const file = actionEl.files[0];
